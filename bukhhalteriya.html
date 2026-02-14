@@ -13,7 +13,7 @@
 
   <!-- 🔒 Content Security Policy -->
   <meta http-equiv="Content-Security-Policy"
-    content="default-src 'self'; script-src 'self' 'unsafe-inline' https://eksifjzzszcqsufwcbsx.supabase.co https://cdnjs.cloudflare.com; connect-src 'self' https://eksifjzzszcqsufwcbsx.supabase.co wss://eksifjzzszcqsufwcbsx.supabase.co; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:;">
+    content="default-src 'self'; script-src 'self' 'unsafe-inline' https://hprzwzqfdnryysqutenc.supabase.co https://cdnjs.cloudflare.com; connect-src 'self' https://hprzwzqfdnryysqutenc.supabase.co wss://hprzwzqfdnryysqutenc.supabase.co; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:;">
 
   <!-- 📊 XLSX бібліотека - завантажується ПЕРШОЮ -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -22,7 +22,7 @@
   <script type="module" src="./src/ts/roboha/bukhhalteriya/bukhhalteriya_session_guard.ts"></script>
 
   <link rel="stylesheet" href="./src/scss/robocha/bukhhalteriya/_bukhhalteriya.scss" />
-  <link rel="icon" type="image/svg+xml" href="/logo.jpg" />
+  <link rel="icon" type="image/svg+xml" href="/logo.png" />
 </head>
 
 <body>
@@ -199,12 +199,6 @@
                   <span class="table-header-text">Залишок</span>
                 </div>
               </th>
-              <th class="magazine-zapchastyst">
-                <div class="table-header-cell">
-                  <span class="table-header-emoji">👤</span>
-                  <span class="table-header-text">Зап-ст</span>
-                </div>
-              </th>
               <th class="magazine-sklad">
                 <div class="table-header-cell">
                   <span class="table-header-emoji">🏬</span>
@@ -227,7 +221,7 @@
           </thead>
           <tbody id="magazine-tbody">
             <tr>
-              <td colspan="15" class="Bukhhalter-no-data">Немає даних для відображення</td>
+              <td colspan="14" class="Bukhhalter-no-data">Немає даних для відображення</td>
             </tr>
           </tbody>
         </table>
@@ -552,15 +546,6 @@
               <label class="Bukhhalter-field-label">📚 Каталог</label>
               <input type="text" class="Bukhhalter-field-input" id="Bukhhalter-magazine-catalog"
                 placeholder="Номер каталогу">
-            </div>
-          </div>
-
-          <div class="Bukhhalter-form-row">
-            <div class="Bukhhalter-field-group">
-              <label class="Bukhhalter-field-label">👤 Запчастист</label>
-              <select class="Bukhhalter-field-input" id="Bukhhalter-magazine-zapchastyst">
-                <option value="">Всі запчастисти</option>
-              </select>
             </div>
           </div>
 

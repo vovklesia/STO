@@ -1,5 +1,5 @@
 {
-  "name": "stobraclavec",
+  "name": "vovklesia",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -15,7 +15,8 @@
     "deploy2": "git fetch origin && git status -sb && git add -A && (git commit -m \"Р С•Р С—Р С‘РЎРѓ\" || echo No changes to commit) && git push --force-with-lease origin main && npm run deploy",
     "vercel": "npm run build:vercel && vercel --prod --yes",
     "vercel:test": "npm run build:vercel && vercel --yes",
-    "vercel:prod": "npm run build:vercel && vercel --prod --yes"
+    "vercel:prod": "npm run build:vercel && vercel --prod --yes",
+    "deploy-fast": "powershell -ExecutionPolicy Bypass -File fast-deploy.ps1"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.4",

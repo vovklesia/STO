@@ -19,7 +19,7 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
 $gitAccounts = @(
-    @{ Name = "Veron3373 (GitHub)"; Email = "veron3373@gmail.com"; Username = "Veron3373" }
+    @{ Name = "vovklesia (GitHub)"; Email = "vovklesia2018@gmail.com"; Username = "vovklesia" }
 )
 
 # Create form
@@ -137,5 +137,5 @@ Write-Host "[4/4] DONE!"
 Write-Host ""
 Write-Host "========================================"
 Write-Host "  ✅ DEPLOYMENT STARTED"
-Write-Host "  - GitHub Pages: https://veron3373.github.io/STO/"
+Write-Host "  - GitHub Pages: https://vovklesia.github.io/STO/"
 Write-Host "========================================"
