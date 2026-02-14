@@ -40,7 +40,7 @@ export async function getGitName(): Promise<string> {
   const hostname = window.location.hostname;
   
   // На Vercel або localhost - просто повертаємо fallback
-  if (hostname.includes('main.sto-braclavets.pages.dev') || hostname.includes('sto-braclavets.pages.dev') || hostname === 'localhost' || hostname === '127.0.0.1') {
+  if (hostname.includes('main.sto-vovklesia.pages.dev') || hostname.includes('sto-vovklesia.pages.dev') || hostname === 'localhost' || hostname === '127.0.0.1') {
     return getGitNameFallback();
   }
   
@@ -57,7 +57,7 @@ export async function getGitName(): Promise<string> {
 export function buildGitUrl(gitName: string, path: string = ""): string {
   // 🔥 ВИПРАВЛЕНО ДЛЯ VERCEL:
   // Використовуємо поточний origin (домен) замість захардкодженого GitHub URL
-  // На Vercel: "https://stobraclavec.vercel.app"
+  // На Vercel: "https://vovklesia.vercel.app"
   // На GitHub Pages: "https://username.github.io"
   // На localhost: "http://localhost:5173"
   const hostname = window.location.hostname;
