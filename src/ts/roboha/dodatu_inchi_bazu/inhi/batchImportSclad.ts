@@ -450,13 +450,45 @@ async function updateActWithDetails(
     if (!actJsonData["За деталі"]) {
       actJsonData["За деталі"] = 0;
     }
-    actJsonData["Деталі"].push(detailData);
+
+    // Перевіряємо чи деталь з таким sclad_id вже існує в акті
+    const existingIndex = actJsonData["Деталі"].findIndex(
+      (d: any) =>
+        d.sclad_id && detailData.sclad_id && d.sclad_id === detailData.sclad_id,
+    );
+
     const detailSum = detailData["Сума"] || 0;
-    actJsonData["За деталі"] = (actJsonData["За деталі"] || 0) + detailSum;
-    if (actJsonData["Загальна сума"] !== undefined) {
-      actJsonData["Загальна сума"] =
-        (actJsonData["Загальна сума"] || 0) + detailSum;
+
+    if (existingIndex !== -1) {
+      // Деталь вже існує — оновлюємо тільки ціну та суму
+      const oldDetail = actJsonData["Деталі"][existingIndex];
+      const oldSum = oldDetail["Сума"] || 0;
+      const sumDiff = detailSum - oldSum;
+
+      // Оновлюємо дані деталі (ціна, сума, кількість)
+      actJsonData["Деталі"][existingIndex] = {
+        ...oldDetail,
+        Ціна: detailData["Ціна"],
+        Сума: detailSum,
+        Кількість: detailData["Кількість"],
+      };
+
+      // Коригуємо загальну суму за деталі
+      actJsonData["За деталі"] = (actJsonData["За деталі"] || 0) + sumDiff;
+      if (actJsonData["Загальна сума"] !== undefined) {
+        actJsonData["Загальна сума"] =
+          (actJsonData["Загальна сума"] || 0) + sumDiff;
+      }
+    } else {
+      // Нова деталь — додаємо
+      actJsonData["Деталі"].push(detailData);
+      actJsonData["За деталі"] = (actJsonData["За деталі"] || 0) + detailSum;
+      if (actJsonData["Загальна сума"] !== undefined) {
+        actJsonData["Загальна сума"] =
+          (actJsonData["Загальна сума"] || 0) + detailSum;
+      }
     }
+
     const { error: updateError } = await supabase
       .from("acts")
       .update({ data: actJsonData })
