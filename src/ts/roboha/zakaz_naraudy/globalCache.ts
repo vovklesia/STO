@@ -163,9 +163,9 @@ export const globalCache: GlobalDataCache = {
   oldNumbers: new Map<number, number>(),
   initialActItems: [],
   generalSettings: {
-    stoName: "B.S.Motorservice",
-    address: "вул. Корольова, 6, Вінниця",
-    phone: "068 931 24 38",
+    stoName: "",
+    address: "",
+    phone: "",
     headerColor: "#164D25",
     tableColor: "#164D25",
     printColorMode: true, // За замовчуванням кольоровий друк
@@ -207,9 +207,9 @@ export function loadGeneralSettingsFromLocalStorage(): boolean {
     if (stored) {
       const parsed = JSON.parse(stored) as GeneralSettings;
       globalCache.generalSettings = {
-        stoName: parsed.stoName || "B.S.Motorservice",
-        address: parsed.address || "вул. Корольова, 6, Вінниця",
-        phone: parsed.phone || "068 931 24 38",
+        stoName: parsed.stoName || "",
+        address: parsed.address || "",
+        phone: parsed.phone || "",
         headerColor: parsed.headerColor || "#164D25",
         tableColor: parsed.tableColor || "#164D25",
         printColorMode:
@@ -265,14 +265,13 @@ export async function loadGeneralSettingsFromDB(): Promise<void> {
         const value = (row as any)["Загальні"] || "";
         switch (row.setting_id) {
           case 1:
-            globalCache.generalSettings.stoName = value || "B.S.Motorservice";
+            globalCache.generalSettings.stoName = value || "";
             break;
           case 2:
-            globalCache.generalSettings.address =
-              value || "вул. Корольова, 6, Вінниця";
+            globalCache.generalSettings.address = value || "";
             break;
           case 3:
-            globalCache.generalSettings.phone = value || "068 931 24 38";
+            globalCache.generalSettings.phone = value || "";
             break;
           case 4:
             globalCache.generalSettings.headerColor = value || "#164D25";

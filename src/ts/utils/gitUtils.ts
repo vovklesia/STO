@@ -57,7 +57,7 @@ export async function getGitName(): Promise<string> {
 export function buildGitUrl(gitName: string, path: string = ""): string {
   // 🔥 ВИПРАВЛЕНО ДЛЯ VERCEL:
   // Використовуємо поточний origin (домен) замість захардкодженого GitHub URL
-  // На Vercel: "https://stobraclavec.vercel.app"
+  // На Vercel: "https://vovklesias.vercel.app"
   // На GitHub Pages: "https://username.github.io"
   // На localhost: "http://localhost:5173"
   const hostname = window.location.hostname;

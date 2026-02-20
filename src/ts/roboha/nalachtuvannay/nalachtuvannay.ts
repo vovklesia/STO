@@ -428,14 +428,13 @@ function handleGeneralSettingsChange(settingId: number, newRecord: any): void {
 
   switch (settingId) {
     case 1: // Назва СТО
-      globalCache.generalSettings.stoName = value || "B.S.Motorservice";
+      globalCache.generalSettings.stoName = value || "";
       break;
     case 2: // Адреса
-      globalCache.generalSettings.address =
-        value || "вул. Корольова, 6, Вінниця";
+      globalCache.generalSettings.address = value || "";
       break;
     case 3: // Телефон
-      globalCache.generalSettings.phone = value || "068 931 24 38";
+      globalCache.generalSettings.phone = value || "";
       break;
     case 4: // Колір шапки акту
       globalCache.generalSettings.headerColor = value || DEFAULT_COLOR;
@@ -727,11 +726,9 @@ async function saveGeneralSettings(modal: HTMLElement): Promise<number> {
   // Оновлюємо globalCache та localStorage, якщо були зміни
   if (changesCount > 0) {
     // Оновлюємо globalCache
-    globalCache.generalSettings.stoName =
-      nameInput?.value || "B.S.Motorservice";
-    globalCache.generalSettings.address =
-      addressInput?.value || "вул. Корольова, 6, Вінниця";
-    globalCache.generalSettings.phone = phoneInput?.value || "068 931 24 38";
+    globalCache.generalSettings.stoName = nameInput?.value || "";
+    globalCache.generalSettings.address = addressInput?.value || "";
+    globalCache.generalSettings.phone = phoneInput?.value || "";
     globalCache.generalSettings.headerColor =
       headerColor?.value || DEFAULT_COLOR;
     globalCache.generalSettings.tableColor = tableColor?.value || DEFAULT_COLOR;
