@@ -1,10 +1,14 @@
-// D:\Alim\Проект\Бодя СТО\stoBraclavecGIT\tsconfig.json
-
+// D:\Alim\Проект\Бодя СТО\vovklesia\tsconfig.json
 {
   "$schema": "https://json.schemastore.org/tsconfig",
   "files": [],
   "references": [
-    { "path": "./tsconfig.app.json" },
-    { "path": "./tsconfig.node.json" }
-  ]
+    {
+      "path": "./tsconfig.app.json"
+    },
+    {
+      "path": "./tsconfig.node.json"
+    }
+  ],
+  "exclude": ["supabase/functions"]
 }

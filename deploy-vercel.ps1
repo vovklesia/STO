@@ -7,7 +7,7 @@ Set-Location -LiteralPath $Root
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
 Write-Host "========================================"
-Write-Host "  Deploy to Vercel - stobraclavec.vercel.app"
+Write-Host "  Deploy to Vercel - vovklesias.vercel.app"
 Write-Host "========================================"
 Write-Host ""
 
@@ -19,7 +19,7 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
 $vercelAccounts = @(
-    @{ Name = "Veron3373 (Main)"; Team = ""; Scope = "" }
+    @{ Name = "vovklesia (Main)"; Team = ""; Scope = "" }
 )
 
 # Create form
@@ -102,8 +102,8 @@ Write-Host "========================================"
 # ═══════════════════════════════════════════════════════════════════════════════
 
 $projects = @(
-    @{ Name = "sto"; Url = "https://stobraclavec.vercel.app" },
-    @{ Name = "stobraclavec"; Url = "https://stobraclavec.vercel.app" }
+    @{ Name = "sto"; Url = "https://vovklesias.vercel.app" },
+    @{ Name = "vovklesias"; Url = "https://vovklesias.vercel.app" }
 )
 
 # Create project selection form
