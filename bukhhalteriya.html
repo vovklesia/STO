@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="uk">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Бухгалтерія</title>
+
+  <!-- 🔒 Захист від кешування -->
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+
+  <!-- 🔒 Content Security Policy -->
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'self'; script-src 'self' 'unsafe-inline' https://hprzwzqfdnryysqutenc.supabase.co https://cdnjs.cloudflare.com; connect-src 'self' https://hprzwzqfdnryysqutenc.supabase.co wss://hprzwzqfdnryysqutenc.supabase.co; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:;">
+
+  <!-- 📊 XLSX бібліотека - завантажується ПЕРШОЮ -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+  <!-- 🔒 Перевірка Google сесії -->
+
+  <link rel="icon" type="image/svg+xml" href="/STO/logo.png" />
+  <script type="module" crossorigin src="/STO/assets/bukhhalteriya-Cq8xLapi.js"></script>
+  <link rel="modulepreload" crossorigin href="/STO/assets/supabase-DjCBILTv.js">
+  <link rel="modulepreload" crossorigin href="/STO/assets/project.config-DUfbQKeR.js">
+  <link rel="modulepreload" crossorigin href="/STO/assets/pdf-yBvge-Eo.js">
+  <link rel="modulepreload" crossorigin href="/STO/assets/main-lEEsSsVM.js">
+  <link rel="stylesheet" crossorigin href="/STO/assets/project-DAfq2CGK.css">
+  <link rel="stylesheet" crossorigin href="/STO/assets/main-UsnG0Tx9.css">
+  <link rel="stylesheet" crossorigin href="/STO/assets/bukhhalteriya-CKECWuvt.css">
+</head>
+
+<body>
+  <div class="Bukhhalter-container">
+    <div class="Bukhhalter-table-section">
+      <div class="Bukhhalter-section-header">
+        <div class="Bukhhalter-table-title" id="table-title">👥 Дані підлеглих</div>
+        <a href="main.html" class="Bukhhalter-nav-link">🛠️← СТО</a>
+      </div>
+
+      <div class="Bukhhalter-total-sum" id="total-sum"></div>
+
+      <!-- Таблиця підлеглих -->
+      <div id="podlegle-table-container">
+        <table class="Bukhhalter-data-table" id="podlegle-table">
+          <thead>
+            <tr>
+              <th>
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">💰</span>
+                  <span class="table-header-text">Розраховано</span>
+                </div>
+              </th>
+              <th class="pidlehli-dataOn">
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">📅</span>
+                  <span class="table-header-text">Відкриття</span>
+                </div>
+              </th>
+              <th class="pidlehli-dataOff">
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">📅</span>
+                  <span class="table-header-text">Закриття</span>
+                </div>
+              </th>
+              <th class="pidlehli-dodano">
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">📝</span>
+                  <span class="table-header-text">Додано</span>
+                </div>
+              </th>
+              <th>
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">👨‍🔧</span>
+                  <span class="table-header-text">ПІБ</span>
+                </div>
+              </th>
+              <th class="pidlehli-akt">
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">📋</span>
+                  <span class="table-header-text">Акт_№</span>
+                </div>
+              </th>
+              <th>
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">👤</span>
+                  <span class="table-header-text">Клієнт</span>
+                </div>
+              </th>
+              <th class="pidlehli-avto">
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">🚗</span>
+                  <span class="table-header-text">Автомобіль</span>
+                </div>
+              </th>
+              <th class="pidlehli-robota">
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">🔧</span>
+                  <span class="table-header-text">Робота</span>
+                </div>
+              </th>
+              <th class="pidlehli-kilkist">
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">🔢</span>
+                  <span class="table-header-text">Кількість</span>
+                </div>
+              </th>
+              <th class="pidlehli-money">
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">💶</span>
+                  <span class="table-header-text">Ціна</span>
+                </div>
+              </th>
+              <th class="pidlehli-money">
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">💵</span>
+                  <span class="table-header-text">Сума</span>
+                </div>
+              </th>
+              <th class="pidlehli-diya">
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">⚡</span>
+                  <span class="table-header-text">Дії</span>
+                </div>
+              </th>
+            </tr>
+          </thead>
+          <tbody id="podlegle-tbody">
+            <tr>
+              <td colspan="13" class="Bukhhalter-no-data">Немає даних для відображення</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Таблиця магазину -->
+      <div id="magazine-table-container" style="display: none;">
+        <table class="Bukhhalter-data-table" id="magazine-table">
+          <thead>
+            <tr>
+              <th>
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">💰</span>
+                  <span class="table-header-text">Розраховано</span>
+                </div>
+              </th>
+              <th class="magazine-dataOn">
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">📅</span>
+                  <span class="table-header-text">Прихід</span>
+                </div>
+              </th>
+              <th>
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">🏪</span>
+                  <span class="table-header-text">Магазин</span>
+                </div>
+              </th>
+              <th class="magazine-raxunok">
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">🧾</span>
+                  <span class="table-header-text">Рахунок</span>
+                </div>
+              </th>
+              <th class="magazine-akt">
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">📋</span>
+                  <span class="table-header-text">Акт_№</span>
+                </div>
+              </th>
+              <th>
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">📦</span>
+                  <span class="table-header-text">Найменування</span>
+                </div>
+              </th>
+              <th>
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">📚</span>
+                  <span class="table-header-text">Каталог</span>
+                </div>
+              </th>
+              <th class="magazine-kilkist">
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">🔢</span>
+                  <span class="table-header-text">Кількість</span>
+                </div>
+              </th>
+              <th class="magazine-money">
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">💶</span>
+                  <span class="table-header-text">Ціна</span>
+                </div>
+              </th>
+              <th class="magazine-money">
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">💵</span>
+                  <span class="table-header-text">Сума</span>
+                </div>
+              </th>
+              <th class="magazine-zalushok">
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">📦</span>
+                  <span class="table-header-text">Залишок</span>
+                </div>
+              </th>
+              <th class="magazine-zapchastyst">
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">👤</span>
+                  <span class="table-header-text">Зап-ст</span>
+                </div>
+              </th>
+              <th class="magazine-sklad">
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">🏬</span>
+                  <span class="table-header-text">Склад</span>
+                </div>
+              </th>
+              <th class="magazine-povernennya">
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">🚚</span>
+                  <span class="table-header-text">Повернення</span>
+                </div>
+              </th>
+              <th class="magazine-diya">
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">⚡</span>
+                  <span class="table-header-text">Дії</span>
+                </div>
+              </th>
+            </tr>
+          </thead>
+          <tbody id="magazine-tbody">
+            <tr>
+              <td colspan="15" class="Bukhhalter-no-data">Немає даних для відображення</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Таблиця деталей по актам -->
+      <div id="details-table-container" style="display: none;">
+        <table class="Bukhhalter-data-table" id="details-table">
+          <thead>
+            <tr>
+              <th>
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">💰</span>
+                  <span class="table-header-text">Розраховано</span>
+                </div>
+              </th>
+              <th class="poAktam-dataOn">
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">📅</span>
+                  <span class="table-header-text">Відкриття</span>
+                </div>
+              </th>
+              <th class="poAktam-dataOff">
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">📅</span>
+                  <span class="table-header-text">Закриття</span>
+                </div>
+              </th>
+              <th class="poAktam-akt">
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">📋</span>
+                  <span class="table-header-text">Акт_№</span>
+                </div>
+              </th>
+              <th>
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">🚗</span>
+                  <span class="table-header-text">Автомобіль</span>
+                </div>
+              </th>
+              <th>
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">🏪</span>
+                  <span class="table-header-text">Магазин</span>
+                </div>
+              </th>
+              <th class="poAktam-enuvannya">
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">📦</span>
+                  <span class="table-header-text">Найменування</span>
+                </div>
+              </th>
+              <th class="poAktam-katalog">
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">📚</span>
+                  <span class="table-header-text">Каталог</span>
+                </div>
+              </th>
+              <th class="poAktam-kilkist">
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">🔢</span>
+                  <span class="table-header-text">Кількість</span>
+                </div>
+              </th>
+              <th class="poAktam-money">
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">💶</span>
+                  <span class="table-header-text">Ціна</span>
+                </div>
+              </th>
+              <th class="poAktam-money">
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">💵</span>
+                  <span class="table-header-text">Сума</span>
+                </div>
+              </th>
+              <th class="poAktam-sklad">
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">🏬</span>
+                  <span class="table-header-text">Склад</span>
+                </div>
+              </th>
+              <th class="poAktam-diya">
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">⚡</span>
+                  <span class="table-header-text">Дії</span>
+                </div>
+              </th>
+            </tr>
+          </thead>
+          <tbody id="details-tbody">
+            <tr>
+              <td colspan="13" class="Bukhhalter-no-data">Немає даних для відображення</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Таблиця витрат -->
+      <div id="vutratu-table-container" style="display: none;">
+        <table class="Bukhhalter-data-table" id="vutratu-table">
+          <thead>
+            <tr>
+              <th>
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">💰</span>
+                  <span class="table-header-text">Розраховано</span>
+                </div>
+              </th>
+              <th class="vutratu-dataOn">
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">📅</span>
+                  <span class="table-header-text">Відкриття</span>
+                </div>
+              </th>
+              <th class="vutratu-dataOff">
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">📅</span>
+                  <span class="table-header-text">Закриття</span>
+                </div>
+              </th>
+              <th>
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">📂</span>
+                  <span class="table-header-text">Категорія</span>
+                </div>
+              </th>
+              <th class="vutratu-akt">
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">📋</span>
+                  <span class="table-header-text">Акт_№</span>
+                </div>
+              </th>
+              <th class="vutratu-opis">
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">📝 <input type="checkbox" id="include-client-description"
+                      style="width: 18px; height: 18px; cursor: pointer; accent-color: #f5576c;">
+                  </span>
+                  <span class="table-header-text">Опис</span>
+                </div>
+              </th>
+              <th class="vutratu-money">
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">💵</span>
+                  <span class="table-header-text">Прибуток</span>
+                </div>
+              </th>
+              <th class="vutratu-suma-v-kasi">
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">💶</span>
+                  <span class="table-header-text">Сума в касі</span>
+                </div>
+              </th>
+              <th>
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">💳</span>
+                  <span class="table-header-text">Спосіб оплати</span>
+                </div>
+              </th>
+              <th class="vutratu-prumitku">
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">📋 <input type="checkbox" id="include-car-notes"
+                      style="width: 18px; height: 18px; cursor: pointer; accent-color: #f5576c;">
+                  </span>
+                  <span class="table-header-text">Примітки</span>
+                </div>
+              </th>
+              <th class="vutratu-diya">
+                <div class="table-header-cell">
+                  <span class="table-header-emoji">⚡</span>
+                  <span class="table-header-text">Дії</span>
+                </div>
+              </th>
+            </tr>
+          </thead>
+          <tbody id="vutratu-tbody">
+            <tr>
+              <td colspan="10" class="Bukhhalter-no-data">Немає витрат для відображення</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Контрольна секція -->
+    <div class="Bukhhalter-control-section">
+      <!-- Кнопки вкладок -->
+      <div class="Bukhhalter-tabs">
+        <button id="tab-btn-magazine" class="Bukhhalter-tab-btn" style="display: none;"
+          onclick="switchTab(event, 'magazine')">🏪 Склад</button>
+
+        <button id="tab-btn-podlegle" class="Bukhhalter-tab-btn" style="display: none;"
+          onclick="switchTab(event, 'podlegle')">👨‍🔧 Зарплата</button>
+
+        <button id="tab-btn-details" class="Bukhhalter-tab-btn" style="display: none;"
+          onclick="switchTab(event, 'details')">⚙️ Деталі</button>
+
+        <button id="tab-btn-vutratu" class="Bukhhalter-tab-btn" style="display: none;"
+          onclick="switchTab(event, 'vutratu')">💰 Прибуток</button>
+      </div>
+
+      <div class="Bukhhalter-form-container">
+        <!-- Форма Співробітників -->
+        <div id="Bukhhalter-podlegle-section" class="Bukhhalter-form-section">
+          <h2 class="Bukhhalter-section-title">👨‍🔧 Облік роботи підлеглих</h2>
+          <div class="Bukhhalter-date-filter-toggle">
+            <button type="button" class="date-filter-btn active" data-filter="open"
+              title="Фільтрувати по даті відкриття">
+              📅 Відкриття
+            </button>
+            <button type="button" class="date-filter-btn" data-filter="close" title="Фільтрувати по даті закриття">
+              📅 Закриття
+            </button>
+            <button type="button" class="date-filter-btn" data-filter="paid" title="Фільтрувати по даті розрахунку">
+              💰 Розраховано
+            </button>
+          </div>
+          <div class="Bukhhalter-form-row">
+            <div class="Bukhhalter-field-group">
+              <label class="Bukhhalter-field-label">📅 Дата відкриття акту</label>
+              <input type="date" class="Bukhhalter-field-input" id="Bukhhalter-podlegle-date-open">
+            </div>
+            <div class="Bukhhalter-field-group">
+              <label class="Bukhhalter-field-label">📅 Дата закриття акту</label>
+              <input type="date" class="Bukhhalter-field-input" id="Bukhhalter-podlegle-date-close">
+            </div>
+          </div>
+          <div class="Bukhhalter-form-row">
+            <div class="Bukhhalter-field-group" style="flex: 4;">
+              <label class="Bukhhalter-field-label">👨‍🔧 ПІБ</label>
+              <select class="Bukhhalter-field-input" id="Bukhhalter-podlegle-name-select">
+                <option value="">Оберіть ПІБ (або залиште порожнім для всіх)</option>
+              </select>
+            </div>
+            <div class="Bukhhalter-field-group" style="flex: 1;">
+              <label class="Bukhhalter-field-label">📋 № Акту</label>
+              <select class="Bukhhalter-field-input" id="Bukhhalter-podlegle-act-select">
+                <option value="">Всі</option>
+              </select>
+            </div>
+          </div>
+          <div class="Bukhhalter-field-group">
+            <label class="Bukhhalter-field-label">🛠️ Робота</label>
+            <input type="text" class="Bukhhalter-field-input" id="Bukhhalter-podlegle-work-input"
+              placeholder="Введіть або оберіть роботу">
+          </div>
+          <div class="Bukhhalter-toggle-container">
+            <label class="Bukhhalter-field-label">📋 Статус актів</label>
+            <div>
+              <input type="range" min="0" max="2" value="2" class="Bukhhalter-status-toggle"
+                id="details-status-filter-toggle">
+              <div class="Bukhhalter-toggle-labels">
+                <span>Закриті</span>
+                <span>Відкриті</span>
+                <span>Всі</span>
+              </div>
+            </div>
+          </div>
+          <div class="Bukhhalter-toggle-container">
+            <label class="Bukhhalter-field-label">💰 Розрахунок</label>
+            <div class="Bukhhalter-toggle-wrapper">
+              <input type="range" min="0" max="2" value="2" class="Bukhhalter-payment-toggle"
+                id="payment-filter-toggle">
+              <div class="Bukhhalter-toggle-labels"><span>Розраховано</span><span>Не розраховано</span><span>Всі</span>
+              </div>
+            </div>
+          </div>
+          <div class="Bukhhalter-toggle-container">
+            <label class="Bukhhalter-field-label">💵 Процент роботи</label>
+            <div class="Bukhhalter-toggle-wrapper">
+              <input type="range" min="0" max="2" value="2" class="Bukhhalter-percentage-toggle"
+                id="percentage-filter-toggle">
+              <div class="Bukhhalter-toggle-labels"><span>Меньший</span><span>Більший</span><span>Всі</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Форма магазину -->
+        <div id="Bukhhalter-magazine-section" class="Bukhhalter-form-section Bukhhalter-active">
+          <h2 class="Bukhhalter-section-title">🏪 Облік товарів магазину</h2>
+          <div class="Bukhhalter-date-filter-toggle">
+            <button type="button" class="date-filter-btn active" data-filter="open"
+              title="Фільтрувати по даті відкриття">
+              📅 Відкриття
+            </button>
+            <button type="button" class="date-filter-btn" data-filter="paid" title="Фільтрувати по даті розрахунку">
+              💰 Розраховано
+            </button>
+          </div>
+          <div class="Bukhhalter-form-row">
+            <div class="Bukhhalter-field-group">
+              <label class="Bukhhalter-field-label">📅 Дата відкриття акту</label>
+              <input type="date" class="Bukhhalter-field-input" id="Bukhhalter-magazine-date-open">
+            </div>
+            <div class="Bukhhalter-field-group">
+              <label class="Bukhhalter-field-label">📅 Дата закриття акту</label>
+              <input type="date" class="Bukhhalter-field-input" id="Bukhhalter-magazine-date-close">
+            </div>
+          </div>
+
+          <div class="Bukhhalter-form-row">
+            <div class="Bukhhalter-field-group">
+              <label class="Bukhhalter-field-label">🏪 Магазин</label>
+              <input type="text" class="Bukhhalter-field-input" id="Bukhhalter-magazine-shop"
+                placeholder="Назва магазину">
+            </div>
+            <div class="Bukhhalter-field-group">
+              <label class="Bukhhalter-field-label">🧾 Рахунок</label>
+              <input type="text" class="Bukhhalter-field-input" id="Bukhhalter-magazine-bill"
+                placeholder="Номер рахунку">
+            </div>
+          </div>
+
+          <div class="Bukhhalter-form-row">
+            <div class="Bukhhalter-field-group">
+              <label class="Bukhhalter-field-label">📦 Найменування</label>
+              <input type="text" class="Bukhhalter-field-input" id="Bukhhalter-magazine-item"
+                placeholder="Назва товару">
+            </div>
+            <div class="Bukhhalter-field-group">
+              <label class="Bukhhalter-field-label">📚 Каталог</label>
+              <input type="text" class="Bukhhalter-field-input" id="Bukhhalter-magazine-catalog"
+                placeholder="Номер каталогу">
+            </div>
+          </div>
+
+          <div class="Bukhhalter-form-row">
+            <div class="Bukhhalter-field-group">
+              <label class="Bukhhalter-field-label">👤 Запчастист</label>
+              <select class="Bukhhalter-field-input" id="Bukhhalter-magazine-zapchastyst">
+                <option value="">Всі запчастисти</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="Bukhhalter-toggle-container">
+            <label class="Bukhhalter-field-label">💰 Розрахунок</label>
+            <div class="Bukhhalter-toggle-wrapper">
+              <input type="range" min="0" max="2" value="2" class="Bukhhalter-payment-toggle"
+                id="magazine-payment-filter-toggle">
+              <div class="Bukhhalter-toggle-labels">
+                <span>Розраховано</span>
+                <span>Не розраховано</span>
+                <span>Всі</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="Bukhhalter-toggle-container">
+            <label class="Bukhhalter-field-label">📦 Статус наявності на складі</label>
+            <div class="Bukhhalter-toggle-wrapper">
+              <input type="range" min="0" max="4" value="4" class="Bukhhalter-availability-toggle"
+                id="magazine-availability-filter-toggle">
+              <div class="Bukhhalter-toggle-labels-5">
+                <span>Присутні</span>
+                <span>Нульові</span>
+                <span>Відємні</span>
+                <span>Повернення</span>
+                <span>Всі</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="Bukhhalter-toggle-container">
+            <label class="Bukhhalter-field-label">🏬 Склад</label>
+            <div class="Bukhhalter-sklad-filter-wrapper" id="magazine-sklad-filter-container">
+              <!-- Кнопки складів будуть згенеровані динамічно -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Форма деталей по актам -->
+        <div id="Bukhhalter-details-section" class="Bukhhalter-form-section">
+          <h2 class="Bukhhalter-section-title">⚙️ Деталі по Актам</h2>
+          <div class="Bukhhalter-date-filter-toggle">
+            <button type="button" class="date-filter-btn active" data-filter="open"
+              title="Фільтрувати по даті відкриття">
+              📅 Відкриття
+            </button>
+            <button type="button" class="date-filter-btn" data-filter="close" title="Фільтрувати по даті закриття">
+              📅 Закриття
+            </button>
+            <button type="button" class="date-filter-btn" data-filter="paid" title="Фільтрувати по даті розрахунку">
+              💰 Розраховано
+            </button>
+          </div>
+          <div class="Bukhhalter-form-row">
+            <div class="Bukhhalter-field-group">
+              <label class="Bukhhalter-field-label">📅 Дата відкриття акту</label>
+              <input type="date" class="Bukhhalter-field-input" id="Bukhhalter-details-date-open">
+            </div>
+            <div class="Bukhhalter-field-group">
+              <label class="Bukhhalter-field-label">📅 Дата закриття акту</label>
+              <input type="date" class="Bukhhalter-field-input" id="Bukhhalter-details-date-close">
+            </div>
+          </div>
+          <div class="Bukhhalter-form-row">
+            <div class="Bukhhalter-field-group">
+              <label class="Bukhhalter-field-label">📦 Найменування</label>
+              <input type="text" class="Bukhhalter-field-input" id="Bukhhalter-details-item"
+                placeholder="Введіть або оберіть найменування">
+            </div>
+            <div class="Bukhhalter-field-group">
+              <label class="Bukhhalter-field-label">📚 Каталог</label>
+              <input type="text" class="Bukhhalter-field-input" id="Bukhhalter-details-catalog"
+                placeholder="Введіть або оберіть Каталог номер">
+            </div>
+          </div>
+          <div class="Bukhhalter-toggle-container">
+            <label class="Bukhhalter-field-label">📋 Статус актів</label>
+            <div class="Bukhhalter-toggle-wrapper">
+              <input type="range" min="0" max="2" value="2" class="Bukhhalter-status-toggle"
+                id="poAktam-status-filter-toggle">
+              <div class="Bukhhalter-toggle-labels">
+                <span>Закриті</span>
+                <span>Відкриті</span>
+                <span>Всі</span>
+              </div>
+            </div>
+          </div>
+          <div class="Bukhhalter-toggle-container">
+            <label class="Bukhhalter-field-label">💰 Розрахунок</label>
+            <div class="Bukhhalter-toggle-wrapper">
+              <input type="range" min="0" max="2" value="2" class="Bukhhalter-payment-toggle"
+                id="poAktam-payment-filter-toggle">
+              <div class="Bukhhalter-toggle-labels"><span>Розраховано</span><span>Не розраховано</span><span>Всі</span>
+              </div>
+            </div>
+          </div>
+          <div class="Bukhhalter-toggle-container">
+            <label class="Bukhhalter-field-label">💵 Процент роботи</label>
+            <div class="Bukhhalter-toggle-wrapper">
+              <input type="range" min="0" max="2" value="2" class="Bukhhalter-percentage-toggle"
+                id="poAktam-percentage-filter-toggle">
+              <div class="Bukhhalter-toggle-labels"><span>Меньший</span><span>Більший</span><span>Всі</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="Bukhhalter-toggle-container">
+            <label class="Bukhhalter-field-label">🏬 Склад</label>
+            <div class="Bukhhalter-sklad-filter-wrapper" id="details-sklad-filter-container">
+              <!-- Кнопки складів будуть згенеровані динамічно -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Форма прибутку -->
+        <div id="Bukhhalter-vutratu-section" class="Bukhhalter-form-section">
+          <h2 class="Bukhhalter-section-title">💰 Облік прибутку та витрат</h2>
+          <div class="Bukhhalter-date-filter-toggle">
+            <button type="button" class="date-filter-btn active" data-filter="open"
+              title="Фільтрувати по даті відкриття">
+              📅 Відкриття
+            </button>
+            <button type="button" class="date-filter-btn" data-filter="close" title="Фільтрувати по даті закриття">
+              📅 Закриття
+            </button>
+            <button type="button" class="date-filter-btn" data-filter="paid" title="Фільтрувати по даті розрахунку">
+              💰 Розраховано
+            </button>
+          </div>
+
+          <!-- ДОДАЙ ЦЕ -->
+          <!--           <div class="Bukhhalter-form-row" style="margin-top: 15px; margin-bottom: 10px;">
+            <div class="Bukhhalter-field-group">
+              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                <input type="checkbox" id="include-client-description"
+                  style="width: 18px; height: 18px; cursor: pointer; accent-color: #667eea;">
+                <span style="font-weight: 600; color: #333;">📝 Підтягувати дані клієнта в Опис</span>
+              </label>
+            </div>
+            <div class="Bukhhalter-field-group">
+              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                <input type="checkbox" id="include-car-notes"
+                  style="width: 18px; height: 18px; cursor: pointer; accent-color: #f5576c;">
+                <span style="font-weight: 600; color: #333;">📋 Підтягувати дані авто в Примітки</span>
+              </label>
+            </div>
+          </div> -->
+
+          <div class="Bukhhalter-form-row">
+            <div class="Bukhhalter-field-group">
+              <label class="Bukhhalter-field-label">📅 Дата від</label>
+              <input type="date" class="Bukhhalter-field-input" id="Bukhhalter-vutratu-date-from">
+            </div>
+            <div class="Bukhhalter-field-group">
+              <label class="Bukhhalter-field-label">📅 Дата до</label>
+              <input type="date" class="Bukhhalter-field-input" id="Bukhhalter-vutratu-date-to">
+            </div>
+          </div>
+          <div class="Bukhhalter-form-row">
+            <div class="Bukhhalter-field-group">
+              <label class="Bukhhalter-field-label">📂 Категорія</label>
+              <select class="Bukhhalter-field-input" id="Bukhhalter-vutratu-category">
+                <option value="">Оберіть категорію</option>
+              </select>
+            </div>
+            <div class="Bukhhalter-field-group">
+              <label class="Bukhhalter-field-label">💳 Спосіб оплати</label>
+              <select class="Bukhhalter-field-input" id="Bukhhalter-vutratu-payment-method">
+                <option value="">Оберіть спосіб оплати</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="Bukhhalter-toggle-container">
+            <label class="Bukhhalter-field-label">💲 Тип операції</label>
+            <div class="Bukhhalter-toggle-wrapper">
+              <input type="range" min="0" max="2" value="2" class="Bukhhalter-expense-type-toggle"
+                id="vutratu-type-filter-toggle">
+              <div class="Bukhhalter-toggle-labels-2">
+                <span>Прибуток</span>
+                <span>Витрати</span>
+                <span>Всі</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="Bukhhalter-toggle-container">
+            <label class="Bukhhalter-field-label">📋 Статус актів</label>
+            <div>
+              <input type="range" min="0" max="2" value="2" class="Bukhhalter-status-toggle"
+                id="vutratu-status-filter-toggle">
+              <div class="Bukhhalter-toggle-labels">
+                <span>Закриті</span>
+                <span>Відкриті</span>
+                <span>Всі</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="Bukhhalter-toggle-container">
+            <label class="Bukhhalter-field-label">💰 Розрахунок</label>
+            <div class="Bukhhalter-toggle-wrapper">
+              <input type="range" min="0" max="2" value="2" class="Bukhhalter-payment-toggle"
+                id="vutratu-payment-filter-toggle">
+              <div class="Bukhhalter-toggle-labels">
+                <span>Розраховано</span>
+                <span>Сума в касі</span>
+                <span>Всі</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="Bukhhalter-toggle-container">
+            <label class="Bukhhalter-field-label">🏷️ Знижка</label>
+            <div class="Bukhhalter-toggle-wrapper">
+              <input type="range" min="0" max="2" value="2" class="Bukhhalter-payment-toggle"
+                id="vutratu-discount-filter-toggle">
+              <div class="Bukhhalter-toggle-labels">
+                <span>Без знижки</span>
+                <span>Знижка</span>
+                <span>Всі</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="Bukhhalter-field-group">
+            <button class="Bukhhalter-action-button Bukhhalter-purple-button" onclick="openExpenseModal()">
+              💰 Додати витрату
+            </button>
+          </div>
+
+        </div>
+
+        <!-- Кнопки (загальні для всіх вкладок) -->
+        <div class="Bukhhalter-button-container">
+          <div class="Bukhhalter-button-row">
+            <button id="Bukhhalter-search-button" class="Bukhhalter-action-button Bukhhalter-add-button"
+              onclick="addRecord(event)">🔍 Пошук</button>
+            <button class="Bukhhalter-action-button Bukhhalter-clear-button" onclick="clearForm()">🗑️
+              Очистити</button>
+          </div>
+          <div class="Bukhhalter-button-row">
+            <button class="Bukhhalter-action-button Bukhhalter-excel-button" onclick="downloadToExcel()">📥
+              Excel</button>
+            <button id="Bukhhalter-calc-button" type="button" class="Bukhhalter-action-button Bukhhalter-save-btn"
+              onclick="runMassPaymentCalculation(event)">
+              💰 Розрахунок
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="expense-modal" class="expense-modal" style="display: none;">
+    <div class="expense-modal-content">
+      <div class="expense-modal-header">
+        <h2 id="expense-modal-title">Додати витрату</h2>
+        <button class="expense-mode-switcher mode-add" onclick="cycleExpenseMode()"
+          id="expense-mode-btn">Додати</button>
+        <button class="expense-modal-close" onclick="closeExpenseModal()">X</button>
+      </div>
+      <div class="expense-modal-body">
+        <div class="Bukhhalter-form-row">
+          <div class="Bukhhalter-field-group">
+            <label class="Bukhhalter-field-label">Дата</label>
+            <input type="date" class="Bukhhalter-field-input" id="expense-modal-date">
+          </div>
+          <div class="Bukhhalter-field-group">
+            <label class="Bukhhalter-field-label">Категорія</label>
+            <select class="Bukhhalter-field-input" id="expense-modal-category">
+              <option value="">Оберіть категорію</option>
+            </select>
+          </div>
+        </div>
+        <div class="Bukhhalter-form-row">
+          <div class="Bukhhalter-field-group">
+            <label class="Bukhhalter-field-label">Спосіб оплати</label>
+            <select class="Bukhhalter-field-input" id="expense-modal-payment-method">
+              <option value="">Оберіть спосіб оплати</option>
+            </select>
+          </div>
+          <div class="Bukhhalter-field-group">
+            <label class="Bukhhalter-field-label">Сума</label>
+            <input type="text" class="Bukhhalter-field-input" id="expense-modal-amount" placeholder="0"
+              oninput="formatAmountWithSpaces(this)">
+          </div>
+        </div>
+        <div class="Bukhhalter-field-group">
+          <label class="Bukhhalter-field-label">Опис витрат</label>
+          <textarea class="Bukhhalter-field-input Bukhhalter-field-textarea" id="expense-modal-description"
+            placeholder="Введіть опис" rows="3" oninput="autoResizeTextarea(this)"></textarea>
+        </div>
+        <div class="Bukhhalter-field-group">
+          <label class="Bukhhalter-field-label">Примітки</label>
+          <textarea class="Bukhhalter-field-input Bukhhalter-field-textarea" id="expense-modal-notes"
+            placeholder="Додаткова інформація" rows="3" oninput="autoResizeTextarea(this)"></textarea>
+        </div>
+        <div class="expense-modal-footer">
+          <button class="Bukhhalter-action-button Bukhhalter-save-btn"
+            onclick="saveExpenseFromModal()">Записати</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Основний модуль додатку -->
+</body>
+
+</html>
