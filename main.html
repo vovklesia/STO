@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="uk">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>Основний</title>
+
+    <!-- 🔒 Перевірка Google сесії -->
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/momentjs/latest/moment.min.js"></script>
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.css" />
+    <link rel="icon" type="image/svg+xml" href="/STO/logo.png" />
+
+    <style>
+        /* Стилі для пошуку */
+        .search-container {
+            display: flex;
+            align-items: center;
+            position: relative;
+            margin-left: 15px;
+        }
+
+        .search-input {
+            width: 0;
+            padding: 0;
+            border: none;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.5);
+            background: transparent;
+            color: #333;
+            font-size: 16px;
+            outline: none;
+            opacity: 0;
+            transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+            visibility: hidden;
+        }
+
+        .search-input.active {
+            width: 220px;
+            padding: 5px 10px;
+            opacity: 1;
+            visibility: visible;
+            margin-left: 5px;
+            border-bottom: 2px solid #4a90e2;
+        }
+
+        .search-icon {
+            cursor: pointer;
+            font-size: 1.4em;
+            padding: 5px;
+            color: #555;
+            transition: color 0.3s;
+        }
+
+        .search-icon:hover {
+            color: #4a90e2;
+            transform: scale(1.1);
+        }
+
+        .search-input::placeholder {
+            color: rgba(0, 0, 0, 0.4);
+            font-style: italic;
+        }
+    </style>
+  <script type="module" crossorigin src="/STO/assets/main-DrMZkvpQ.js"></script>
+  <link rel="modulepreload" crossorigin href="/STO/assets/supabase-DjCBILTv.js">
+  <link rel="modulepreload" crossorigin href="/STO/assets/project.config-DUfbQKeR.js">
+  <link rel="modulepreload" crossorigin href="/STO/assets/pdf-yBvge-Eo.js">
+  <link rel="modulepreload" crossorigin href="/STO/assets/main-lEEsSsVM.js">
+  <link rel="stylesheet" crossorigin href="/STO/assets/project-DAfq2CGK.css">
+  <link rel="stylesheet" crossorigin href="/STO/assets/main-UsnG0Tx9.css">
+</head>
+
+<body class="page-2">
+    <ul class="main-menu">
+        <div class="user-info" id="userInfoBlock" style="display: none;">
+            <div class="user-surname"></div>
+            <div class="user-access"></div>
+        </div>
+
+        <div class="menu-items" id="menu-items-to-hide" style="display: none;">
+            <li><a href="#" id="logout-link" class="menu-link"
+                    onclick="window.logoutFromSystemAndRedirect(); return false;">Вихід</a></li>
+            <li><a href="#" class="menu-link" data-action="openSettings">Налаштування</a></li>
+            <li><a href="#" class="menu-link all_other_bases" data-action="openClient">Додати</a></li>
+            <li><a href="bukhhalteriya.html" class="menu-link all_other_bases_Bukhh"
+                    data-action="openBukhhalteriya">Бухгалтерія</a></li>
+            <li class="active"><a href="#" class="menu-link" data-action="openHome">Наряд</a></li>
+            <li style="display: none;" id="menu-item-planyvannya"><a href="planyvannya.html" class="menu-link"
+                    data-action="openPlanyvannya">Планування</a></li>
+
+            <li><input type="text" id="dateRangePicker" readonly /></li>
+
+            <li class="search-container">
+                <span id="searchIcon" class="search-icon" title="Пошук">🔍</span>
+                <input type="text" id="searchInput" class="search-input" placeholder="Введіть для пошуку" />
+            </li>
+        </div>
+        <li class="alim">1.3.0 / © 2025 A-Service</li>
+    </ul>
+
+    <a href="#" id="open-modal-sakaz_narad"></a>
+    <a href="#" id="open-modal-create-sakaz_narad"></a>
+    <a href="#" id="open-modal-all_other_bases"></a>
+    <a href="#" id="open-modal-settings"></a>
+    <a href="#" id="open-modal-Bukhh"></a>
+
+    <div id="table-container-modal-sakaz_narad"></div>
+
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.min.js"></script>
+
+</body>
+
+</html>
