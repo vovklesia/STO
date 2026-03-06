@@ -1071,63 +1071,71 @@ function applyAccessRestrictions(): void {
   if (userAccessLevel === "Слюсар") {
     const printActButton = document.getElementById("print-act-button");
     if (printActButton) printActButton.classList.add("hidden");
-    restrictPhotoAccess();
   }
 }
 
-function restrictPhotoAccess(): void {
-  const photoCell = document.querySelector(
-    "table.zakaz_narayd-table.left tr:nth-child(5) td:nth-child(2)",
-  ) as HTMLTableCellElement | null;
+function initActPhotos(actId: number, isClosed: boolean, isRestricted: boolean): void {
+  const slot = document.getElementById("photo-section-slot");
+  if (!slot) return;
 
-  if (!photoCell) return;
+  const folderPath = `a${actId}`;
 
-  const existingHandler = (photoCell as any).__gd_click__;
-  if (existingHandler) {
-    photoCell.removeEventListener("click", existingHandler);
-  }
-
-  const restrictedClickHandler = async (e: MouseEvent) => {
-    e.preventDefault();
-
-    const modal = document.getElementById("zakaz_narayd-custom-modal");
-    const actIdStr = modal?.getAttribute("data-act-id");
-    if (!actIdStr) return;
-    const actId = Number(actIdStr);
-
+  const loadPhotos = async () => {
     try {
-      // Фото тепер зберігається в окремій колонці photo_url
-      const { data: act, error } = await supabase
-        .from("acts")
-        .select("photo_url, date_off")
-        .eq("act_id", actId)
-        .single();
+      const { data, error } = await supabase.storage.from("ai-photos").list(folderPath, { limit: 50 });
+      if (error) throw error;
 
-      if (error || !act) {
-        showNotification("Помилка отримання даних акту", "error");
-        return;
+      const files = data ? data.filter(f => f.name !== '.emptyFolderPlaceholder') : [];
+
+      let html = `<div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 5px;">`;
+      for (const file of files) {
+        const { data: { publicUrl } } = supabase.storage.from("ai-photos").getPublicUrl(`${folderPath}/${file.name}`);
+        html += `<a href="${publicUrl}" target="_blank">
+                    <img src="${publicUrl}" style="height: 50px; width: 50px; border-radius: 4px; object-fit: cover; border: 1px solid #ccc;" alt="photo">
+                  </a>`;
+      }
+      html += `</div>`;
+
+      if (!isClosed && !isRestricted) {
+        html += `<button id="btn-add-act-photo" class="status-lock-icon" style="font-size:12px; padding:4px 8px; width:auto; border-radius:4px; height:auto; cursor:pointer; background: #e0e0e0; color: #333; border: 1px solid #ccc;" title="Додати фото">📷 Додати (${files.length})</button>
+                 <input type="file" id="file-upload-act-photo" multiple accept="image/*" style="display:none;" />`;
+      } else if (files.length === 0) {
+        html += `<span style="font-size:12px; color:#999;">Фото відсутні</span>`;
       }
 
-      const photoUrl = act.photo_url;
-      const hasLink = !!photoUrl && photoUrl.length > 0;
+      slot.innerHTML = html;
 
-      if (hasLink) {
-        window.open(photoUrl, "_blank");
-        return;
+      const btn = document.getElementById("btn-add-act-photo");
+      const input = document.getElementById("file-upload-act-photo") as HTMLInputElement;
+      if (btn && input) {
+        btn.addEventListener("click", (e) => { e.preventDefault(); input.click(); });
+        input.addEventListener("change", async (e) => {
+          const uploadFiles = (e.target as HTMLInputElement).files;
+          if (!uploadFiles || uploadFiles.length === 0) return;
+
+          btn.textContent = "⏳...";
+          btn.style.pointerEvents = "none";
+
+          try {
+            for (let i = 0; i < uploadFiles.length; i++) {
+              const f = uploadFiles[i];
+              const ext = f.name.split('.').pop() || "jpg";
+              const fileName = `${Date.now()}_${i}.${ext}`;
+              await supabase.storage.from("ai-photos").upload(`${folderPath}/${fileName}`, f);
+            }
+          } catch (err) {
+            showNotification("Помилка завантаження", "error");
+          }
+          loadPhotos();
+        });
       }
-
-      showNotification(
-        "Створення папки заборонено для вашого рівня доступу",
-        "warning",
-      );
     } catch (err) {
-      // console.error("❌ Помилка при перевірці фото:", err);
-      showNotification("Помилка при перевірці фото", "error");
+      slot.innerHTML = `<span style="color:red; font-size:12px;">Помилка завантаження</span>`;
     }
   };
 
-  (photoCell as any).__gd_click__ = restrictedClickHandler;
-  photoCell.addEventListener("click", restrictedClickHandler);
+  slot.innerHTML = `<span style="font-size:12px; color:#999;">Завантаження...</span>`;
+  loadPhotos();
 }
 
 async function createRequiredModals(): Promise<void> {
@@ -1538,6 +1546,9 @@ async function addModalHandlers(
   addSaveHandler(actId, actDetails);
   initDeleteRowHandler();
   initIndexIconHandler();
+
+  // Додаємо відображення та логіку фотографій
+  initActPhotos(actId, isClosed, isRestricted);
 
   const smsBtn = document.getElementById("sms-btn");
   if (smsBtn) {
