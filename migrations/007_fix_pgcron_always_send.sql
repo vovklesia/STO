@@ -40,7 +40,7 @@ SELECT cron.schedule(
   '* * * * *',
   $$
   SELECT net.http_post(
-    url := 'https://eksifjzzszcqsufwcbsx.supabase.co/functions/v1/check-reminders',
+    url := 'https://hprzwzqfdnryysqutenc.supabase.co/functions/v1/check-reminders',
     headers := jsonb_build_object(
       'Content-Type', 'application/json',
       'Authorization', 'Bearer ' || current_setting('app.settings.service_role_key', true)
@@ -65,7 +65,7 @@ SELECT cron.schedule(
   '* * * * *',
   $$
   SELECT net.http_post(
-    url := 'https://eksifjzzszcqsufwcbsx.supabase.co/functions/v1/check-reminders',
+    url := 'https://hprzwzqfdnryysqutenc.supabase.co/functions/v1/check-reminders',
     headers := '{"Content-Type": "application/json", "Authorization": "Bearer <YOUR_SERVICE_ROLE_KEY>"}'::jsonb,
     body := '{}'::jsonb
   );

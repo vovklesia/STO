@@ -1,7 +1,7 @@
 -- ════════════════════════════════════════════════════════════════════════════
 -- 🧠 АТЛАС — ПОВНА БАЗА ДАНИХ (єдиний файл)
 -- Усі таблиці, індекси, RPC-функції, тригери, RLS, pg_cron
--- Для проєкту: stobraclavec (eksifjzzszcqsufwcbsx.supabase.co)
+-- Для проєкту: STO (hprzwzqfdnryysqutenc.supabase.co)
 -- Дата: 2026-03-06
 -- ════════════════════════════════════════════════════════════════════════════
 --
@@ -11,9 +11,9 @@
 --   3. Переконайтесь що розширення pg_cron та pg_net увімкнені
 --      (Dashboard → Database → Extensions)
 --   4. Після виконання задеплойте Edge Functions:
---      npx supabase functions deploy check-reminders --project-ref eksifjzzszcqsufwcbsx --no-verify-jwt
---      npx supabase functions deploy send-telegram --project-ref eksifjzzszcqsufwcbsx --no-verify-jwt
---      npx supabase functions deploy telegram-bot --project-ref eksifjzzszcqsufwcbsx --no-verify-jwt
+--      npx supabase functions deploy check-reminders --project-ref hprzwzqfdnryysqutenc --no-verify-jwt
+--      npx supabase functions deploy send-telegram --project-ref hprzwzqfdnryysqutenc --no-verify-jwt
+--      npx supabase functions deploy telegram-bot --project-ref hprzwzqfdnryysqutenc --no-verify-jwt
 --
 -- ════════════════════════════════════════════════════════════════════════════
 
@@ -522,7 +522,7 @@ SELECT cron.schedule(
   '* * * * *',
   $$
   SELECT net.http_post(
-    url := 'https://eksifjzzszcqsufwcbsx.supabase.co/functions/v1/check-reminders',
+    url := 'https://hprzwzqfdnryysqutenc.supabase.co/functions/v1/check-reminders',
     headers := '{"Content-Type": "application/json", "Authorization": "Bearer <YOUR_SERVICE_ROLE_KEY>"}'::jsonb,
     body := '{}'::jsonb
   );

@@ -68,3 +68,6 @@ project_clone_workflow*.png
 
 # Supabase temp files
 supabase/.temp/
+
+.vercel
+.env*.local
