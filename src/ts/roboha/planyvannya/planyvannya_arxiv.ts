@@ -77,7 +77,7 @@ export class PostArxiv {
     // We bind to the container and use delegation for row tracks
     this.container.addEventListener(
       "mousedown",
-      this.handleMouseDown.bind(this)
+      this.handleMouseDown.bind(this),
     );
 
     // Global click to close context menu
@@ -134,7 +134,7 @@ export class PostArxiv {
                     komentar,
                     act_id,
                     xto_zapusav
-                `
+                `,
         )
         .gte("data_on", startOfDay)
         .lte("data_on", endOfDay);
@@ -152,14 +152,20 @@ export class PostArxiv {
         ...new Set(
           arxivRecords
             .map((r) => r.client_id)
-            .filter((id) => id != null && !isNaN(Number(id)) && !String(id).includes("|||"))
+            .filter(
+              (id) =>
+                id != null && !isNaN(Number(id)) && !String(id).includes("|||"),
+            ),
         ),
       ];
       const carIds = [
         ...new Set(
           arxivRecords
             .map((r) => r.cars_id)
-            .filter((id) => id != null && !isNaN(Number(id)) && !String(id).includes("|||"))
+            .filter(
+              (id) =>
+                id != null && !isNaN(Number(id)) && !String(id).includes("|||"),
+            ),
         ),
       ];
 
@@ -182,7 +188,8 @@ export class PostArxiv {
         const { data: carsData } = await supabase
           .from("cars")
           .select("cars_id, data")
-          .in("cars_id", carIds);
+          .in("cars_id", carIds)
+          .not("is_deleted", "is", true);
 
         if (carsData) {
           carsData.forEach((c) => carsMap.set(c.cars_id, c.data));
@@ -193,12 +200,13 @@ export class PostArxiv {
       for (const record of arxivRecords) {
         const numClientId = Number(record.client_id);
         const numCarId = Number(record.cars_id);
-        const clientData = !isNaN(numClientId) ? (clientsMap.get(numClientId) || {}) : {};
-        const carData = !isNaN(numCarId) ? (carsMap.get(numCarId) || {}) : {};
+        const clientData = !isNaN(numClientId)
+          ? clientsMap.get(numClientId) || {}
+          : {};
+        const carData = !isNaN(numCarId) ? carsMap.get(numCarId) || {} : {};
         this.renderArxivRecord(record, clientData, carData);
       }
-    } catch (err) {
-    }
+    } catch (err) {}
   }
 
   /**
@@ -235,7 +243,7 @@ export class PostArxiv {
                     komentar,
                     act_id,
                     xto_zapusav
-                `
+                `,
         )
         .in("slyusar_id", slyusarIds)
         .gte("data_on", startOfDay)
@@ -249,21 +257,25 @@ export class PostArxiv {
         return;
       }
 
-
-
       // Збираємо тільки числові ID для запиту (зворотна сумісність)
       const clientIds = [
         ...new Set(
           arxivRecords
             .map((r) => r.client_id)
-            .filter((id) => id != null && !isNaN(Number(id)) && !String(id).includes("|||"))
+            .filter(
+              (id) =>
+                id != null && !isNaN(Number(id)) && !String(id).includes("|||"),
+            ),
         ),
       ];
       const carIds = [
         ...new Set(
           arxivRecords
             .map((r) => r.cars_id)
-            .filter((id) => id != null && !isNaN(Number(id)) && !String(id).includes("|||"))
+            .filter(
+              (id) =>
+                id != null && !isNaN(Number(id)) && !String(id).includes("|||"),
+            ),
         ),
       ];
 
@@ -286,7 +298,8 @@ export class PostArxiv {
         const { data: carsData } = await supabase
           .from("cars")
           .select("cars_id, data")
-          .in("cars_id", carIds);
+          .in("cars_id", carIds)
+          .not("is_deleted", "is", true);
 
         if (carsData) {
           carsData.forEach((c) => carsMap.set(c.cars_id, c.data));
@@ -297,12 +310,13 @@ export class PostArxiv {
       for (const record of arxivRecords) {
         const numClientId = Number(record.client_id);
         const numCarId = Number(record.cars_id);
-        const clientData = !isNaN(numClientId) ? (clientsMap.get(numClientId) || {}) : {};
-        const carData = !isNaN(numCarId) ? (carsMap.get(numCarId) || {}) : {};
+        const clientData = !isNaN(numClientId)
+          ? clientsMap.get(numClientId) || {}
+          : {};
+        const carData = !isNaN(numCarId) ? carsMap.get(numCarId) || {} : {};
         this.renderArxivRecord(record, clientData, carData);
       }
-    } catch (err) {
-    }
+    } catch (err) {}
   }
 
   /**
@@ -351,7 +365,7 @@ export class PostArxiv {
   private renderArxivRecord(record: any, clientData: any, carData: any): void {
     // Знаходимо рядок слюсаря по slyusar_id
     const rowTrack = this.container.querySelector(
-      `.post-row-track[data-slyusar-id="${record.slyusar_id}"]`
+      `.post-row-track[data-slyusar-id="${record.slyusar_id}"]`,
     ) as HTMLElement;
 
     if (!rowTrack) {
@@ -447,7 +461,7 @@ export class PostArxiv {
       rowTrack,
       startMins,
       endMins,
-      reservationData
+      reservationData,
     );
     if (block) {
       block.dataset.xtoZapusav = xtoZapusav;
@@ -461,7 +475,7 @@ export class PostArxiv {
     row: HTMLElement,
     startMins: number,
     endMins: number,
-    data: ReservationData
+    data: ReservationData,
   ): HTMLElement {
     const totalMinutes = 12 * 60; // 12 hours (8 to 20)
 
@@ -544,7 +558,10 @@ export class PostArxiv {
       e.stopPropagation();
       if (!this.canUserEditBlock(block)) {
         const creator = block.dataset.xtoZapusav || "невідомо";
-        showNotification(`Ви не можете редагувати цей запис. Створив: ${creator}`, "error");
+        showNotification(
+          `Ви не можете редагувати цей запис. Створив: ${creator}`,
+          "error",
+        );
         return;
       }
       this.editingBlock = block;
@@ -672,7 +689,7 @@ export class PostArxiv {
       const validRanges = this.calculateValidRanges(
         rawStartMins,
         rawEndMins,
-        this.activeRow
+        this.activeRow,
       );
 
       if (validRanges.length === 0) {
@@ -719,7 +736,10 @@ export class PostArxiv {
   private handleBlockMouseDown(e: MouseEvent, block: HTMLElement): void {
     if (!this.canUserEditBlock(block)) {
       const creator = block.dataset.xtoZapusav || "невідомо";
-      showNotification(`Ви не можете переміщати цей запис. Створив: ${creator}`, "error");
+      showNotification(
+        `Ви не можете переміщати цей запис. Створив: ${creator}`,
+        "error",
+      );
       return;
     }
     e.preventDefault();
@@ -751,8 +771,9 @@ export class PostArxiv {
 
     // Move block
     this.movingBlock.style.left = `${e.clientX - this.dragOffsetX}px`;
-    this.movingBlock.style.top = `${e.clientY - this.movingBlock.offsetHeight / 2
-      }px`;
+    this.movingBlock.style.top = `${
+      e.clientY - this.movingBlock.offsetHeight / 2
+    }px`;
 
     // Check validity
     this.movingBlock.className = "post-reservation-block dragging-active"; // Reset classes
@@ -788,7 +809,7 @@ export class PostArxiv {
           startMins,
           endMins,
           track,
-          this.movingBlock
+          this.movingBlock,
         );
 
         if (overlaps) {
@@ -851,7 +872,7 @@ export class PostArxiv {
     this.movingBlock.classList.remove(
       "dragging-active",
       "post-drag-valid",
-      "post-drag-invalid"
+      "post-drag-invalid",
     );
     this.movingBlock.style.pointerEvents = "";
     this.movingBlock.style.position = "absolute";
@@ -893,7 +914,6 @@ export class PostArxiv {
       const postArxivId = movedBlock.dataset.postArxivId;
       const newSlyusarId = track.dataset.slyusarId;
 
-
       if (postArxivId && newSlyusarId) {
         try {
           // Отримуємо поточну дату з заголовку
@@ -912,7 +932,6 @@ export class PostArxiv {
             const dataOff = `${currentDate}T${endHour
               .toString()
               .padStart(2, "0")}:${endMin.toString().padStart(2, "0")}:00`;
-
 
             // Оновлюємо запис в БД
             const { error } = await supabase
@@ -940,7 +959,7 @@ export class PostArxiv {
               if (
                 currentDate &&
                 typeof (window as any).refreshOccupancyIndicatorsForDates ===
-                "function"
+                  "function"
               ) {
                 await (window as any).refreshOccupancyIndicatorsForDates([
                   currentDate,
@@ -950,7 +969,7 @@ export class PostArxiv {
           } else {
             showNotification(
               "Запис переміщено (без збереження в БД)",
-              "warning"
+              "warning",
             );
           }
         } catch (err) {
@@ -1013,7 +1032,7 @@ export class PostArxiv {
   private openModal(
     startTime: string,
     endTime: string,
-    existingData: Partial<ReservationData> | string = ""
+    existingData: Partial<ReservationData> | string = "",
   ): void {
     const headerDate = this.getCurrentDateFromHeader();
     const dateToUse = headerDate || new Date().toISOString().split("T")[0];
@@ -1058,13 +1077,13 @@ export class PostArxiv {
 
     if (targetSlyusarId) {
       targetRowForBusy = this.container.querySelector(
-        `.post-row-track[data-slyusar-id="${targetSlyusarId}"]`
+        `.post-row-track[data-slyusar-id="${targetSlyusarId}"]`,
       ) as HTMLElement;
     }
 
     if (targetRowForBusy) {
       const blocks = Array.from(
-        targetRowForBusy.querySelectorAll(".post-reservation-block")
+        targetRowForBusy.querySelectorAll(".post-reservation-block"),
       ) as HTMLElement[];
       blocks.forEach((block) => {
         // Skip if this is the block being edited
@@ -1107,7 +1126,7 @@ export class PostArxiv {
           let targetRow: HTMLElement | null = null;
           if (effectiveSlyusarId) {
             targetRow = this.container.querySelector(
-              `.post-row-track[data-slyusar-id="${effectiveSlyusarId}"]`
+              `.post-row-track[data-slyusar-id="${effectiveSlyusarId}"]`,
             ) as HTMLElement;
           }
           if (!targetRow && this.activeRow) targetRow = this.activeRow;
@@ -1130,7 +1149,7 @@ export class PostArxiv {
               startMins,
               endMins,
               targetRow,
-              excludeBlock
+              excludeBlock,
             );
 
             if (validRanges.length === 0) {
@@ -1151,10 +1170,10 @@ export class PostArxiv {
           start,
           end,
           excludeId,
-          effectiveSlyusarId || undefined
+          effectiveSlyusarId || undefined,
         );
       },
-      busyIntervals
+      busyIntervals,
     );
   }
 
@@ -1180,13 +1199,13 @@ export class PostArxiv {
         data.startTime,
         data.endTime,
         excludeId,
-        effectiveSlyusarId || undefined
+        effectiveSlyusarId || undefined,
       );
 
       if (!availability.valid) {
         showNotification(
           availability.message || "Цей час вже зайнятий",
-          "error"
+          "error",
         );
         return;
       }
@@ -1200,7 +1219,7 @@ export class PostArxiv {
           data,
           startMins,
           endMins,
-          excludeId
+          excludeId,
         );
       } else {
         successId = await this.saveReservationToDb(data, startMins, endMins);
@@ -1221,7 +1240,6 @@ export class PostArxiv {
     const startMins = this.timeToMinutesFromStart(data.startTime);
     const endMins = this.timeToMinutesFromStart(data.endTime);
 
-
     if (endMins <= startMins) {
       showNotification("Час закінчення має бути пізніше часу початку", "error");
       return;
@@ -1230,11 +1248,10 @@ export class PostArxiv {
     let targetRow: HTMLElement | null = null;
     if (effectiveSlyusarId) {
       targetRow = this.container.querySelector(
-        `.post-row-track[data-slyusar-id="${effectiveSlyusarId}"]`
+        `.post-row-track[data-slyusar-id="${effectiveSlyusarId}"]`,
       ) as HTMLElement;
     }
     if (!targetRow && this.activeRow) targetRow = this.activeRow;
-
 
     if (targetRow) {
       // Обчислюємо вільні діапазони
@@ -1242,9 +1259,8 @@ export class PostArxiv {
         startMins,
         endMins,
         targetRow,
-        this.editingBlock
+        this.editingBlock,
       );
-
 
       // Перевірка: чи весь виділений діапазон зайнятий?
       if (validRanges.length === 0) {
@@ -1262,7 +1278,7 @@ export class PostArxiv {
             data,
             range.start,
             range.end,
-            parseInt(oldPostArxivId)
+            parseInt(oldPostArxivId),
           );
           if (successId) {
             this.editingBlock.remove();
@@ -1271,7 +1287,7 @@ export class PostArxiv {
               targetRow,
               range.start,
               range.end,
-              newData
+              newData,
             );
             showNotification("Запис оновлено", "success");
           }
@@ -1289,7 +1305,7 @@ export class PostArxiv {
             const newId = await this.saveReservationToDb(
               data,
               range.start,
-              range.end
+              range.end,
             );
             if (newId) {
               const checkoutData = { ...data, postArxivId: newId };
@@ -1297,7 +1313,7 @@ export class PostArxiv {
                 targetRow,
                 range.start,
                 range.end,
-                checkoutData
+                checkoutData,
               );
               successCount++;
             }
@@ -1318,7 +1334,7 @@ export class PostArxiv {
           const newId = await this.saveReservationToDb(
             data,
             range.start,
-            range.end
+            range.end,
           );
           if (newId) {
             const checkoutData = { ...data, postArxivId: newId };
@@ -1326,7 +1342,7 @@ export class PostArxiv {
               targetRow,
               range.start,
               range.end,
-              checkoutData
+              checkoutData,
             );
             successCount++;
           }
@@ -1350,7 +1366,7 @@ export class PostArxiv {
     data: ReservationData,
     startMins: number,
     endMins: number,
-    existingId?: number
+    existingId?: number,
   ): Promise<number | null> {
     const targetDate = data.date;
     if (!targetDate) {
@@ -1371,8 +1387,8 @@ export class PostArxiv {
       .padStart(2, "0")}:${endMin.toString().padStart(2, "0")}:00`;
 
     // Зберігаємо текстові дані клієнта і авто у форматі "значення|||значення"
-    const clientText = `${data.clientName || ''}|||${data.clientPhone || ''}`;
-    const carText = `${data.carModel || ''}|||${data.carNumber || ''}`;
+    const clientText = `${data.clientName || ""}|||${data.clientPhone || ""}`;
+    const carText = `${data.carModel || ""}|||${data.carNumber || ""}`;
 
     const payload: any = {
       status: data.status,
@@ -1413,7 +1429,7 @@ export class PostArxiv {
             (window as any).refreshOccupancyIndicatorsForDates([
               dateFromPayload,
             ]),
-          100
+          100,
         );
       }
 
@@ -1440,7 +1456,7 @@ export class PostArxiv {
             (window as any).refreshOccupancyIndicatorsForDates([
               dateFromPayload,
             ]),
-          100
+          100,
         );
       }
 
@@ -1453,7 +1469,7 @@ export class PostArxiv {
     startTime: string,
     endTime: string,
     excludeId?: number,
-    slyusarId?: number
+    slyusarId?: number,
   ): Promise<{ valid: boolean; message?: string }> {
     if (!slyusarId)
       return { valid: false, message: "Не обрано пост (слюсаря)" };
@@ -1491,7 +1507,7 @@ export class PostArxiv {
    */
   private renderBlockContent(
     block: HTMLElement,
-    data: ReservationData | string
+    data: ReservationData | string,
   ): void {
     block.innerHTML = ""; // Очищаємо попередній вміст
 
@@ -1574,7 +1590,7 @@ export class PostArxiv {
     row: HTMLElement,
     startMins: number,
     endMins: number,
-    data: ReservationData | string
+    data: ReservationData | string,
   ): void {
     const totalMinutes = 12 * 60; // 12 hours (8 to 20)
 
@@ -1667,7 +1683,10 @@ export class PostArxiv {
       e.stopPropagation();
       if (!this.canUserEditBlock(block)) {
         const creator = block.dataset.xtoZapusav || "невідомо";
-        showNotification(`Ви не можете редагувати цей запис. Створив: ${creator}`, "error");
+        showNotification(
+          `Ви не можете редагувати цей запис. Створив: ${creator}`,
+          "error",
+        );
         return;
       }
       this.editingBlock = block;
@@ -1700,11 +1719,11 @@ export class PostArxiv {
     start: number,
     end: number,
     track: HTMLElement,
-    excludeBlock: HTMLElement | null = null
+    excludeBlock: HTMLElement | null = null,
   ): boolean {
     // Get all existing blocks in this row
     const existingBlocks = Array.from(
-      track.querySelectorAll(".post-reservation-block")
+      track.querySelectorAll(".post-reservation-block"),
     ) as HTMLElement[];
 
     for (const block of existingBlocks) {
@@ -1729,7 +1748,7 @@ export class PostArxiv {
     start: number,
     end: number,
     row: HTMLElement,
-    excludeBlock: HTMLElement | null = null
+    excludeBlock: HTMLElement | null = null,
   ): { start: number; end: number }[] {
     // This function is still used by onMouseUp of drag selection, so keep it but maybe it should use checkOverlap logic too?
     // Or just leave as is for selection logic.
@@ -1737,7 +1756,7 @@ export class PostArxiv {
 
     // Get all existing blocks in this row
     const existingBlocks = Array.from(
-      row.querySelectorAll(".post-reservation-block")
+      row.querySelectorAll(".post-reservation-block"),
     ) as HTMLElement[];
     const busyIntervals: { start: number; end: number }[] = [];
     // const totalMinutes = 12 * 60; // 720 minutes - unused, removing
@@ -1789,13 +1808,16 @@ export class PostArxiv {
   private handleResizeMouseDown(
     e: MouseEvent,
     block: HTMLElement,
-    side: "left" | "right"
+    side: "left" | "right",
   ): void {
     if (!this.canUserEditBlock(block)) {
       e.preventDefault();
       e.stopPropagation();
       const creator = block.dataset.xtoZapusav || "невідомо";
-      showNotification(`Ви не можете змінювати розмір запису. Створив: ${creator}`, "error");
+      showNotification(
+        `Ви не можете змінювати розмір запису. Створив: ${creator}`,
+        "error",
+      );
       return;
     }
     this.isResizing = true;
@@ -1871,7 +1893,7 @@ export class PostArxiv {
       newStart,
       newEnd,
       track,
-      this.resizingBlock
+      this.resizingBlock,
     );
     if (overlaps) {
       this.resizingBlock.classList.add("post-drag-invalid");
@@ -1889,11 +1911,11 @@ export class PostArxiv {
     // Finalize
     const start = parseInt(
       this.resizingBlock.dataset.tempStart ||
-      this.resizeOriginalStartMins.toString()
+        this.resizeOriginalStartMins.toString(),
     );
     const end = parseInt(
       this.resizingBlock.dataset.tempEnd ||
-      this.resizeOriginalEndMins.toString()
+        this.resizeOriginalEndMins.toString(),
     );
 
     // Restore transition
@@ -1925,7 +1947,7 @@ export class PostArxiv {
       this.resizingBlock.style.width = `${widthPercent}%`;
       showNotification(
         "Неможливо змінити час: перетин з іншим записом",
-        "error"
+        "error",
       );
     } else {
       // Commit to DB
@@ -1944,7 +1966,7 @@ export class PostArxiv {
   private async updateReservationTime(
     block: HTMLElement,
     startMins: number,
-    endMins: number
+    endMins: number,
   ): Promise<void> {
     const postArxivId = block.dataset.postArxivId;
     const slyusarId = block.dataset.slyusarId;
@@ -1992,12 +2014,12 @@ export class PostArxiv {
         if (
           currentDate &&
           typeof (window as any).refreshOccupancyIndicatorsForDates ===
-          "function"
+            "function"
         ) {
           setTimeout(
             () =>
               (window as any).refreshOccupancyIndicatorsForDates([currentDate]),
-            100
+            100,
           );
         }
       }
@@ -2091,7 +2113,7 @@ export class PostArxiv {
         setTimeout(
           () =>
             (window as any).refreshOccupancyIndicatorsForDates([currentDate]),
-          100
+          100,
         );
       }
     });

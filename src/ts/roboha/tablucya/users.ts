@@ -499,16 +499,221 @@ export function createLoginModal(): Promise<string | null> {
     // ───── ПІДЗАГОЛОВОК ─────
     const subtitle = document.createElement("p");
     subtitle.className = "login-modal-subtitle";
-    subtitle.textContent = "Введіть ім'я та пароль";
+    subtitle.textContent = "Оберіть користувача та введіть пароль";
 
-    // ───── ІНПУТ ІМ'Я ─────
-    const nameInput = document.createElement("input");
-    nameInput.type = "text";
+    // ───── КАСТОМНИЙ DROPDOWN (portal) ─────
+    const dropdownWrapper = document.createElement("div");
+    dropdownWrapper.className = "custom-dropdown";
+    dropdownWrapper.id = "login-dropdown-wrapper";
+
+    // Прихований select для зберігання значення
+    const nameInput = document.createElement("select") as HTMLSelectElement;
     nameInput.id = "login-name_users";
-    nameInput.placeholder = "Ім'я (напр. Шевченко Т.Г.)";
-    nameInput.className = "login-input";
-    nameInput.autocomplete = "username";
-    nameInput.style.marginBottom = "10px";
+    nameInput.className = "custom-dropdown-hidden";
+    (nameInput as any).autocomplete = "username";
+
+    // Кнопка-тригер для відкриття
+    const dropdownTrigger = document.createElement("button");
+    dropdownTrigger.type = "button";
+    dropdownTrigger.className = "custom-dropdown-trigger";
+    // Solid темний фон — браузерний ButtonFace не прозорий, rgba не працює
+    dropdownTrigger.style.backgroundColor = "#16213e";
+
+    const triggerText = document.createElement("span");
+    triggerText.className = "custom-dropdown-trigger-text";
+    triggerText.textContent = "Оберіть користувача...";
+
+    const triggerIcon = document.createElement("span");
+    triggerIcon.className = "custom-dropdown-trigger-icon";
+    triggerIcon.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>`;
+
+    dropdownTrigger.appendChild(triggerText);
+    dropdownTrigger.appendChild(triggerIcon);
+
+    // Список — портал до body
+    const dropdownList = document.createElement("ul");
+    dropdownList.className = "custom-dropdown-list";
+    document.body.appendChild(dropdownList);
+
+    let dropdownOpen = false;
+
+    const positionList = () => {
+      const rect = dropdownTrigger.getBoundingClientRect();
+      dropdownList.style.position = "fixed";
+      dropdownList.style.top = `${rect.bottom + 6}px`;
+      dropdownList.style.left = `${rect.left}px`;
+      dropdownList.style.width = `${rect.width}px`;
+    };
+
+    const openDropdown = () => {
+      if (dropdownWrapper.hasAttribute("data-disabled")) return;
+      dropdownOpen = true;
+      positionList();
+      dropdownList.classList.add("open");
+      dropdownTrigger.classList.add("open");
+      const activeItem = dropdownList.querySelector(
+        ".custom-dropdown-item.active",
+      );
+      if (activeItem) {
+        setTimeout(
+          () =>
+            activeItem.scrollIntoView({ block: "center", behavior: "smooth" }),
+          50,
+        );
+      }
+    };
+
+    const closeDropdown = () => {
+      dropdownOpen = false;
+      dropdownList.classList.remove("open");
+      dropdownTrigger.classList.remove("open");
+      dropdownList.querySelectorAll(".custom-dropdown-item").forEach((item) => {
+        item.classList.remove("highlighted");
+      });
+    };
+
+    // Порожній варіант за замовчуванням
+    const defaultOption = document.createElement("option");
+    defaultOption.value = "";
+    defaultOption.textContent = "Оберіть користувача...";
+    defaultOption.disabled = true;
+    defaultOption.selected = true;
+    nameInput.appendChild(defaultOption);
+
+    // Функція для оновлення випадаючого списку
+    const updateDropdownList = (names: string[]) => {
+      dropdownList.innerHTML = "";
+      for (const name of names) {
+        const li = document.createElement("li");
+        li.className = "custom-dropdown-item";
+        li.textContent = name;
+        li.dataset.value = name;
+
+        li.addEventListener("mousedown", (e) => {
+          e.preventDefault(); // не втрачаємо фокус
+        });
+
+        li.addEventListener("click", () => {
+          nameInput.value = name;
+          triggerText.textContent = name;
+          triggerText.classList.add("selected");
+          dropdownTrigger.classList.add("has-value");
+          closeDropdown();
+
+          dropdownList
+            .querySelectorAll(".custom-dropdown-item")
+            .forEach((item) => {
+              item.classList.remove("active");
+            });
+          li.classList.add("active");
+
+          nameInput.dispatchEvent(new Event("change", { bubbles: true }));
+        });
+
+        dropdownList.appendChild(li);
+      }
+    };
+
+    // Завантажити список користувачів з БД
+    (async () => {
+      try {
+        const { data: slyusars, error } = await supabase
+          .from("slyusars")
+          .select("data");
+        if (!error && slyusars) {
+          const names: string[] = [];
+          for (const s of slyusars) {
+            const d = safeParseJSON(s.data);
+            const name = d?.["Name"];
+            if (name && typeof name === "string" && name.trim()) {
+              names.push(name.trim());
+            }
+          }
+          names.sort((a, b) => a.localeCompare(b, "uk"));
+          for (const name of names) {
+            const opt = document.createElement("option");
+            opt.value = name;
+            opt.textContent = name;
+            nameInput.appendChild(opt);
+          }
+          updateDropdownList(names);
+        }
+      } catch {
+        /* не блокуємо вхід якщо список не завантажився */
+      }
+    })();
+
+    // Відкриття/закриття dropdown
+    dropdownTrigger.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (dropdownOpen) {
+        closeDropdown();
+      } else {
+        openDropdown();
+      }
+    });
+
+    // Закриття при кліку зовні
+    const closeOnOutsideClick = (e: MouseEvent) => {
+      if (
+        !dropdownWrapper.contains(e.target as Node) &&
+        !dropdownList.contains(e.target as Node)
+      ) {
+        closeDropdown();
+      }
+    };
+    document.addEventListener("click", closeOnOutsideClick);
+
+    // Перепозиціонування при скролі / resize
+    const repositionOnScroll = () => {
+      if (dropdownOpen) positionList();
+    };
+    window.addEventListener("scroll", repositionOnScroll, true);
+    window.addEventListener("resize", repositionOnScroll);
+
+    // Клавіатурна навігація
+    dropdownTrigger.addEventListener("keydown", (e) => {
+      if (dropdownWrapper.hasAttribute("data-disabled")) return;
+      const items = Array.from(
+        dropdownList.querySelectorAll<HTMLElement>(".custom-dropdown-item"),
+      );
+      const currentIndex = items.findIndex((item) =>
+        item.classList.contains("highlighted"),
+      );
+
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        if (!dropdownOpen) {
+          openDropdown();
+          return;
+        }
+        items.forEach((item) => item.classList.remove("highlighted"));
+        const newIndex =
+          e.key === "ArrowDown"
+            ? currentIndex < items.length - 1
+              ? currentIndex + 1
+              : 0
+            : currentIndex > 0
+              ? currentIndex - 1
+              : items.length - 1;
+        items[newIndex]?.classList.add("highlighted");
+        items[newIndex]?.scrollIntoView({ block: "nearest" });
+      } else if (e.key === "Enter" && dropdownOpen) {
+        e.preventDefault();
+        const highlighted = dropdownList.querySelector<HTMLElement>(
+          ".custom-dropdown-item.highlighted",
+        );
+        if (highlighted) highlighted.click();
+        else closeDropdown();
+      } else if (e.key === "Escape") {
+        closeDropdown();
+      }
+    });
+
+    // Збирання dropdown
+    dropdownWrapper.appendChild(nameInput);
+    dropdownWrapper.appendChild(dropdownTrigger);
 
     // ───── ІНПУТ ПАРОЛЬ ─────
     const passInput = document.createElement("input");
@@ -535,13 +740,13 @@ export function createLoginModal(): Promise<string | null> {
       errorDiv.textContent = message;
       errorDiv.style.display = "block";
       passInput.classList.remove("input-error");
-      nameInput.classList.remove("input-error");
+      dropdownTrigger.classList.remove("input-error");
       void passInput.offsetWidth;
       passInput.classList.add("input-error");
-      nameInput.classList.add("input-error");
+      dropdownTrigger.classList.add("input-error");
       setTimeout(() => {
         passInput.classList.remove("input-error");
-        nameInput.classList.remove("input-error");
+        dropdownTrigger.classList.remove("input-error");
       }, 600);
     };
 
@@ -549,12 +754,14 @@ export function createLoginModal(): Promise<string | null> {
       if (loading) {
         button.innerHTML = '<span class="login-spinner"></span>';
         button.setAttribute("disabled", "true");
-        nameInput.setAttribute("disabled", "true");
+        dropdownWrapper.setAttribute("data-disabled", "true");
+        dropdownTrigger.setAttribute("disabled", "true");
         passInput.setAttribute("disabled", "true");
       } else {
         button.innerHTML = "Увійти";
         button.removeAttribute("disabled");
-        nameInput.removeAttribute("disabled");
+        dropdownWrapper.removeAttribute("data-disabled");
+        dropdownTrigger.removeAttribute("disabled");
         passInput.removeAttribute("disabled");
       }
     };
@@ -565,9 +772,9 @@ export function createLoginModal(): Promise<string | null> {
       title.textContent = "Ласкаво просимо!";
       title.style.color = "#4ade80";
       passInput.classList.remove("input-error");
-      nameInput.classList.remove("input-error");
+      dropdownTrigger.classList.remove("input-error");
       passInput.classList.add("input-success");
-      nameInput.classList.add("input-success");
+      dropdownTrigger.classList.add("input-success");
       button.innerHTML = "✓ Успішно";
       button.style.background =
         "linear-gradient(135deg, #22c55e 0%, #16a34a 100%)";
@@ -579,7 +786,8 @@ export function createLoginModal(): Promise<string | null> {
     const showLockoutState = (lockedUntil: number) => {
       setLoadingState(false);
       button.setAttribute("disabled", "true");
-      nameInput.setAttribute("disabled", "true");
+      dropdownWrapper.setAttribute("data-disabled", "true");
+      dropdownTrigger.setAttribute("disabled", "true");
       passInput.setAttribute("disabled", "true");
 
       const updateCountdown = () => {
@@ -589,10 +797,11 @@ export function createLoginModal(): Promise<string | null> {
           lockoutTimer = null;
           errorDiv.style.display = "none";
           button.removeAttribute("disabled");
-          nameInput.removeAttribute("disabled");
+          dropdownWrapper.removeAttribute("data-disabled");
+          dropdownTrigger.removeAttribute("disabled");
           passInput.removeAttribute("disabled");
           button.innerHTML = "Увійти";
-          nameInput.focus();
+          dropdownTrigger.focus();
           return;
         }
         const s = Math.ceil(remaining / 1000);
@@ -627,7 +836,7 @@ export function createLoginModal(): Promise<string | null> {
       const loginPass = passInput.value.trim();
 
       if (!loginName) {
-        showLoginError("Введіть ім'я");
+        showLoginError("Оберіть користувача");
         nameInput.focus();
         return;
       }
@@ -690,8 +899,7 @@ export function createLoginModal(): Promise<string | null> {
               `Невірне ім'я або пароль (залишилось ${left} спроб)`,
             );
             setLoadingState(false);
-            nameInput.focus();
-            nameInput.select();
+            dropdownTrigger.focus();
           }
         }
       } catch (error) {
@@ -701,11 +909,18 @@ export function createLoginModal(): Promise<string | null> {
       }
     });
 
+    // При виборі користувача — авто-фокус на пароль
+    nameInput.addEventListener("change", () => {
+      if (nameInput.value) {
+        passInput.focus();
+      }
+    });
+
     // Enter для підтвердження
     const onEnter = (event: KeyboardEvent) => {
       if (event.key === "Enter") button.click();
     };
-    nameInput.addEventListener("keypress", onEnter);
+    dropdownTrigger.addEventListener("keypress", onEnter);
     passInput.addEventListener("keypress", onEnter);
 
     // Блокування Escape
@@ -720,7 +935,11 @@ export function createLoginModal(): Promise<string | null> {
     const originalRemove = modal.remove;
     modal.remove = function () {
       document.removeEventListener("keydown", preventEscape);
+      document.removeEventListener("click", closeOnOutsideClick);
+      window.removeEventListener("scroll", repositionOnScroll, true);
+      window.removeEventListener("resize", repositionOnScroll);
       if (lockoutTimer) clearInterval(lockoutTimer);
+      dropdownList.remove();
       originalRemove.call(this);
     };
 
@@ -728,13 +947,13 @@ export function createLoginModal(): Promise<string | null> {
     modalContent.appendChild(icon);
     modalContent.appendChild(title);
     modalContent.appendChild(subtitle);
-    modalContent.appendChild(nameInput);
+    modalContent.appendChild(dropdownWrapper);
     modalContent.appendChild(passInput);
     modalContent.appendChild(errorDiv);
     modalContent.appendChild(button);
     modal.appendChild(modalContent);
 
-    setTimeout(() => nameInput.focus(), 150);
+    setTimeout(() => dropdownTrigger.focus(), 150);
     document.body.appendChild(modal);
   });
 }

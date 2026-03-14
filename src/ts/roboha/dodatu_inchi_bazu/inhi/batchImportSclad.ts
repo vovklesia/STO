@@ -30,6 +30,105 @@ let warehouseListCache: string[] = []; // Кеш активних складів
 let warehouseProcentMap: Map<string, number> = new Map(); // Кеш відсотків складів: warehouse_id -> procent
 let usersListCache: string[] = []; // Кеш користувачів (не Слюсарів)
 
+// ===== Снапшот оригінальних даних для відстеження змін =====
+// Ключ — _scladId, значення — оригінальні поля рядка при завантаженні
+let originalSnapshotMap: Map<string | number, Record<string, any>> = new Map();
+
+// Кеш даних актів, щоб не перезавантажувати один і той самий акт
+let actsDataCache: Map<number, any> = new Map();
+
+/** Зберегти снапшот оригінальних значень рядка */
+function saveRowSnapshot(row: any): void {
+  if (!row._scladId) return;
+  originalSnapshotMap.set(row._scladId, {
+    date: row.date,
+    shop: row.shop,
+    catno: row.catno,
+    detail: row.detail,
+    qty: row.qty,
+    price: row.price,
+    clientPrice: row.clientPrice,
+    warehouse: row.warehouse,
+    invoice: row.invoice,
+    actNo: row.actNo,
+    unit: row.unit,
+    orderStatus: row.orderStatus,
+    createdBy: row.createdBy,
+    notes: row.notes,
+    action: row.action,
+  });
+}
+
+/** Отримати тільки змінені поля для sclad update (порівняння з снапшотом) */
+function getChangedScladFields(
+  row: any,
+  dbDate: string,
+  slyusarIdForRow: number | null,
+): Record<string, any> | null {
+  const snapshot = originalSnapshotMap.get(row._scladId);
+  if (!snapshot) return null; // Немає снапшоту — оновити все
+
+  // Маппінг: поле рядка → поле БД + перетворення
+  const fieldMap: Array<{
+    rowKey: string;
+    dbKey: string;
+    transform: (v: any) => any;
+    snapshotKey?: string;
+  }> = [
+    { rowKey: "date", dbKey: "time_on", transform: () => dbDate || null },
+    { rowKey: "shop", dbKey: "shops", transform: (v: any) => v || null },
+    { rowKey: "catno", dbKey: "part_number", transform: (v: any) => v || null },
+    { rowKey: "detail", dbKey: "name", transform: (v: any) => v || null },
+    {
+      rowKey: "qty",
+      dbKey: "kilkist_on",
+      transform: (v: any) => parseFloat(v) || 0,
+    },
+    {
+      rowKey: "price",
+      dbKey: "price",
+      transform: (v: any) => parseFloat(v) || 0,
+    },
+    { rowKey: "invoice", dbKey: "rahunok", transform: (v: any) => v || null },
+    {
+      rowKey: "unit",
+      dbKey: "unit_measurement",
+      transform: (v: any) => v || null,
+    },
+    { rowKey: "actNo", dbKey: "akt", transform: (v: any) => v || null },
+    {
+      rowKey: "warehouse",
+      dbKey: "scladNomer",
+      transform: (v: any) => (v ? parseFloat(v) : null),
+    },
+    {
+      rowKey: "orderStatus",
+      dbKey: "statys",
+      transform: (v: any) => (v === "Прибула" ? null : v || null),
+    },
+    { rowKey: "notes", dbKey: "prumitka", transform: (v: any) => v || null },
+    {
+      rowKey: "createdBy",
+      dbKey: "xto_zamovuv",
+      transform: () => slyusarIdForRow || null,
+    },
+  ];
+
+  const changed: Record<string, any> = {};
+  let hasChanges = false;
+
+  for (const { rowKey, dbKey, transform } of fieldMap) {
+    const oldVal = String(snapshot[rowKey] ?? "");
+    const newVal = String(row[rowKey] ?? "");
+    if (oldVal !== newVal) {
+      changed[dbKey] = transform(row[rowKey]);
+      hasChanges = true;
+    }
+  }
+
+  return hasChanges ? changed : null;
+}
+
 // ===== Стан сортування таблиці =====
 let sortColumn: string | null = null; // Поточна колонка сортування
 let sortDirection: "asc" | "desc" = "desc"; // Напрямок сортування
@@ -144,6 +243,7 @@ function updateSortIndicators() {
     }
   });
 }
+let activeFilter: string = "Замовити+Замовлено"; // Поточний активний фільтр статусу
 let partNumbersCache: string[] = []; // Кеш каталог номерів з бази sclad
 let partNumberNameMap: Map<string, string> = new Map(); // Кеш каталог номер → назва деталі
 let usersIdMap: Map<string, number> = new Map(); // Кеш ПІБ → slyusar_id
@@ -152,6 +252,7 @@ const UNIT_OPTIONS = [
   { value: "штук", label: "штук" },
   { value: "літр", label: "літр" },
   { value: "комплект", label: "комплект" },
+  { value: "метр", label: "метр" },
 ];
 const VALID_UNITS = UNIT_OPTIONS.map((o) => o.value);
 
@@ -314,7 +415,7 @@ async function loadActsList(): Promise<{
 }> {
   const { data, error } = await supabase
     .from("acts")
-    .select("act_id, date_off")
+    .select("act_id, date_off, data")
     .is("date_off", null) // <-- тільки відкриті (date_off = null)
     .order("act_id", { ascending: false });
 
@@ -325,6 +426,25 @@ async function loadActsList(): Promise<{
 
   const map = new Map(data.map((r: any) => [r.act_id, r.date_off]));
   const list = data.map((r: any) => String(r.act_id)); // список id у вигляді рядків для автодоповнення
+
+  // Кешуємо data кожного акта, щоб при збереженні не робити додаткових запитів
+  actsDataCache.clear();
+  for (const r of data) {
+    if (r.data != null) {
+      let parsed: any;
+      if (typeof r.data === "string") {
+        try {
+          parsed = JSON.parse(r.data);
+        } catch {
+          parsed = {};
+        }
+      } else {
+        parsed = r.data;
+      }
+      actsDataCache.set(r.act_id, parsed);
+    }
+  }
+
   return { list, map };
 }
 
@@ -567,31 +687,39 @@ async function getScladId(
   }
   return data[0].sclad_id;
 }
-// Функція для оновлення акта
-async function updateActWithDetails(
+/** Батч-оновлення акта: завантажує акт 1 раз, додає/оновлює всі деталі, зберігає 1 раз */
+async function batchUpdateActWithDetails(
   actNo: string,
-  detailData: any,
+  detailsArray: any[],
 ): Promise<boolean> {
   try {
-    const { data: actData, error: fetchError } = await supabase
-      .from("acts")
-      .select("act_id, data")
-      .eq("act_id", parseInt(actNo, 10))
-      .single();
-    if (fetchError || !actData) {
-      console.warn(`Акт №${actNo} не знайдено`, fetchError);
-      return false;
-    }
+    const actId = parseInt(actNo, 10);
+
+    // Використовуємо кеш — якщо акт вже завантажений, беремо з кешу
     let actJsonData: any;
-    if (typeof actData.data === "string") {
-      try {
-        actJsonData = JSON.parse(actData.data);
-      } catch {
-        actJsonData = {};
-      }
+    if (actsDataCache.has(actId)) {
+      actJsonData = actsDataCache.get(actId);
     } else {
-      actJsonData = actData.data || {};
+      const { data: actData, error: fetchError } = await supabase
+        .from("acts")
+        .select("act_id, data")
+        .eq("act_id", actId)
+        .single();
+      if (fetchError || !actData) {
+        console.warn(`Акт №${actNo} не знайдено`, fetchError);
+        return false;
+      }
+      if (typeof actData.data === "string") {
+        try {
+          actJsonData = JSON.parse(actData.data);
+        } catch {
+          actJsonData = {};
+        }
+      } else {
+        actJsonData = actData.data || {};
+      }
     }
+
     if (!actJsonData["Деталі"]) {
       actJsonData["Деталі"] = [];
     }
@@ -599,91 +727,69 @@ async function updateActWithDetails(
       actJsonData["За деталі"] = 0;
     }
 
-    // Перевіряємо чи деталь вже існує в акті:
-    // 1) Спочатку шукаємо за sclad_id (точний збіг)
-    // 2) Якщо не знайдено — шукаємо за каталожним номером (Каталог)
-    //    Це запобігає створенню дублікатів деталей в акті
-    let existingIndex = -1;
+    // Обробляємо всі деталі з масиву
+    for (const detailData of detailsArray) {
+      let existingIndex = -1;
 
-    // Крок 1: Пошук за sclad_id
-    if (detailData.sclad_id) {
-      existingIndex = actJsonData["Деталі"].findIndex(
-        (d: any) => d.sclad_id && d.sclad_id === detailData.sclad_id,
-      );
-    }
+      if (detailData.sclad_id) {
+        existingIndex = actJsonData["Деталі"].findIndex(
+          (d: any) => d.sclad_id && d.sclad_id === detailData.sclad_id,
+        );
+      }
 
-    // Крок 2: Якщо не знайдено за sclad_id — шукаємо за каталожним номером + назвою деталі
-    // Порівнюємо ОБИДВА поля, щоб різні деталі з однаковим каталогом (напр. "1") не перезаписували одна одну
-    if (existingIndex === -1 && detailData["Каталог"]) {
-      const newCatNo = String(detailData["Каталог"]).trim().toLowerCase();
-      const newDetailName = String(detailData["Деталь"] || "")
-        .trim()
-        .toLowerCase();
-      if (newCatNo && newCatNo !== "?") {
-        existingIndex = actJsonData["Деталі"].findIndex((d: any) => {
-          const existingCatNo = String(d["Каталог"] || "")
-            .trim()
-            .toLowerCase();
-          const existingDetailName = String(d["Деталь"] || "")
-            .trim()
-            .toLowerCase();
-          return (
-            existingCatNo === newCatNo && existingDetailName === newDetailName
-          );
-        });
+      if (existingIndex === -1 && detailData["Каталог"]) {
+        const newCatNo = String(detailData["Каталог"]).trim().toLowerCase();
+        const newDetailName = String(detailData["Деталь"] || "")
+          .trim()
+          .toLowerCase();
+        if (newCatNo && newCatNo !== "?") {
+          existingIndex = actJsonData["Деталі"].findIndex((d: any) => {
+            const existingCatNo = String(d["Каталог"] || "")
+              .trim()
+              .toLowerCase();
+            const existingDetailName = String(d["Деталь"] || "")
+              .trim()
+              .toLowerCase();
+            return (
+              existingCatNo === newCatNo && existingDetailName === newDetailName
+            );
+          });
+        }
+      }
+
+      const detailSum = detailData["Сума"] || 0;
+
+      if (existingIndex !== -1) {
+        const oldDetail = actJsonData["Деталі"][existingIndex];
+        actJsonData["Деталі"][existingIndex] = {
+          ...oldDetail,
+          Деталь: detailData["Деталь"] || oldDetail["Деталь"],
+          Каталог: detailData["Каталог"] || oldDetail["Каталог"],
+          Магазин: detailData["Магазин"] || oldDetail["Магазин"],
+          sclad_id: detailData.sclad_id || oldDetail.sclad_id,
+        };
+      } else {
+        actJsonData["Деталі"].push(detailData);
+        actJsonData["За деталі"] = (actJsonData["За деталі"] || 0) + detailSum;
+        if (actJsonData["Загальна сума"] !== undefined) {
+          actJsonData["Загальна сума"] =
+            (actJsonData["Загальна сума"] || 0) + detailSum;
+        }
       }
     }
 
-    const detailSum = detailData["Сума"] || 0;
-
-    if (existingIndex !== -1) {
-      // Деталь вже існує в акті — оновлюємо дані
-      const oldDetail = actJsonData["Деталі"][existingIndex];
-      const oldSum = oldDetail["Сума"] || 0;
-      const sumDiff = detailSum - oldSum;
-
-      // Оновлюємо всі поля деталі (назва, ціна, сума, кількість, магазин, sclad_id)
-      actJsonData["Деталі"][existingIndex] = {
-        ...oldDetail,
-        Деталь: detailData["Деталь"] || oldDetail["Деталь"],
-        Каталог: detailData["Каталог"] || oldDetail["Каталог"],
-        Магазин: detailData["Магазин"] || oldDetail["Магазин"],
-        Ціна: detailData["Ціна"],
-        Сума: detailSum,
-        Кількість: detailData["Кількість"],
-        sclad_id: detailData.sclad_id || oldDetail.sclad_id,
-      };
-
-      // Коригуємо загальну суму за деталі
-      actJsonData["За деталі"] = (actJsonData["За деталі"] || 0) + sumDiff;
-      if (actJsonData["Загальна сума"] !== undefined) {
-        actJsonData["Загальна сума"] =
-          (actJsonData["Загальна сума"] || 0) + sumDiff;
-      }
-      // console.log(
-      // `🔄 Оновлено існуючу деталь в акті №${actNo}: ${detailData["Каталог"]} (індекс: ${existingIndex})`,
-      // );
-    } else {
-      // Нова деталь — додаємо
-      actJsonData["Деталі"].push(detailData);
-      actJsonData["За деталі"] = (actJsonData["За деталі"] || 0) + detailSum;
-      if (actJsonData["Загальна сума"] !== undefined) {
-        actJsonData["Загальна сума"] =
-          (actJsonData["Загальна сума"] || 0) + detailSum;
-      }
-      // console.log(
-      // `➕ Додано нову деталь в акт №${actNo}: ${detailData["Каталог"]}`,
-      // );
-    }
-
+    // Один запит на оновлення акта (замість N запитів на кожну деталь)
     const { error: updateError } = await supabase
       .from("acts")
       .update({ data: actJsonData })
-      .eq("act_id", parseInt(actNo, 10));
+      .eq("act_id", actId);
     if (updateError) {
       console.error(`Помилка оновлення акта №${actNo}:`, updateError);
       return false;
     }
+
+    // Оновлюємо кеш
+    actsDataCache.set(actId, actJsonData);
     return true;
   } catch (err) {
     console.error(`Помилка при роботі з актом №${actNo}:`, err);
@@ -768,7 +874,19 @@ function createBatchImportModal() {
     <div class="modal-all_other_bases batch-modal-Excel">
       <button class="modal-close-all_other_bases">×</button>
       <div class="modal-content-Excel">
-        <h3 class="batch-title-Excel">Записати деталі</h3>
+        <div class="batch-filter-bar-Excel">
+          <h3 class="batch-title-Excel">Записати деталі</h3>
+          <div class="batch-filter-buttons-Excel">
+            <button id="filter-zamovyty-btn" class="batch-filter-btn-Excel filter-red-Excel" data-filter="Замовити" title="Показати записи зі статусом Замовити">Замовити</button>
+            <button id="filter-zamovleno-btn" class="batch-filter-btn-Excel filter-blue-Excel" data-filter="Замовлено" title="Показати записи зі статусом Замовлено">Замовлено</button>
+            <button id="filter-prybuly-btn" class="batch-filter-btn-Excel filter-white-Excel" data-filter="Прибула" title="Показати записи зі статусом Прибула">Прибула</button>
+            <button id="filter-zamovyty-zamovleno-btn" class="batch-filter-btn-Excel filter-gradient-Excel active-filter-Excel" data-filter="Замовити+Замовлено" title="Показати Замовити та Замовлено">Замовити + Замовлено</button>
+          </div>
+          <div class="batch-filter-dates-Excel">
+            <label class="batch-filter-date-label-Excel">Від <input type="date" id="filter-date-from-Excel" class="batch-filter-date-input-Excel cell-input-Excel"></label>
+            <label class="batch-filter-date-label-Excel">До <input type="date" id="filter-date-to-Excel" class="batch-filter-date-input-Excel cell-input-Excel"></label>
+          </div>
+        </div>
         <div id="batch-skeleton-loader" class="batch-skeleton-loader-Excel" style="display:none;">
           <div class="batch-skeleton-row-Excel">
             <div class="batch-skeleton-cell-Excel skeleton-pulse" style="width:7%;"></div>
@@ -2423,19 +2541,60 @@ function createEmptyRow(): any {
   };
 }
 
-/* Завантаження записів з sclad де statys = 'Замовити' або 'Замовлено' */
-async function loadScladPendingRecords(): Promise<any[]> {
+/* Завантаження записів з sclad за фільтром статусу та датами */
+async function loadScladFilteredRecords(
+  statusFilter?: string,
+  dateFrom?: string,
+  dateTo?: string,
+): Promise<any[]> {
+  const filter = statusFilter || activeFilter;
   try {
-    const { data, error } = await supabase
-      .from("sclad")
-      .select("*")
-      .in("statys", ["Замовити", "Замовлено"])
-      .order("sclad_id", { ascending: false });
-    if (error) {
-      // console.error("Помилка завантаження записів sclad:", error);
-      return [];
+    let query = supabase.from("sclad").select("*");
+
+    // Фільтр за статусом
+    if (filter === "Замовити") {
+      query = query.eq("statys", "Замовити");
+    } else if (filter === "Замовлено") {
+      query = query.eq("statys", "Замовлено");
+    } else if (filter === "Прибула") {
+      query = query.is("statys", null);
+    } else {
+      // Замовити+Замовлено (за замовчуванням)
+      query = query.in("statys", ["Замовити", "Замовлено"]);
     }
-    if (!data || data.length === 0) return [];
+
+    // Фільтр за датами
+    if (dateFrom) {
+      query = query.gte("time_on", dateFrom);
+    }
+    if (dateTo) {
+      query = query.lte("time_on", dateTo);
+    }
+
+    // Завантажуємо ВСІ записи з пагінацією (Supabase ліміт 1000 за запит)
+    const allData: any[] = [];
+    const batchSize = 1000;
+    let offset = 0;
+    let hasMore = true;
+
+    while (hasMore) {
+      const { data: chunk, error } = await query
+        .order("sclad_id", { ascending: false })
+        .range(offset, offset + batchSize - 1);
+
+      if (error) {
+        // console.error("Помилка завантаження записів sclad:", error);
+        break;
+      }
+      if (!chunk || chunk.length === 0) break;
+
+      allData.push(...chunk);
+      offset += batchSize;
+      hasMore = chunk.length === batchSize;
+    }
+
+    const data = allData;
+    if (data.length === 0) return [];
 
     // Конвертуємо записи sclad у формат рядка таблиці batch
     return data.map((rec: any) => {
@@ -2452,7 +2611,7 @@ async function loadScladPendingRecords(): Promise<any[]> {
       const invoice = String(rec.rahunok || "").trim();
       const actNo = rec.akt ? String(rec.akt).trim() : "";
       const unit = String(rec.unit_measurement || "штук").trim();
-      const orderStatus = String(rec.statys || "Замовити").trim();
+      const orderStatus = rec.statys ? String(rec.statys).trim() : "Прибула";
       const notes = String(rec.prumitka || "").trim();
 
       // Визначаємо ПІБ замовника за slyusar_id
@@ -2494,7 +2653,7 @@ async function loadScladPendingRecords(): Promise<any[]> {
         !!catno &&
         actValid;
 
-      return {
+      const rowObj = {
         date: isoDate,
         shop,
         catno,
@@ -2523,6 +2682,9 @@ async function loadScladPendingRecords(): Promise<any[]> {
         detailExists,
         _scladId: rec.sclad_id, // Зберігаємо sclad_id для можливого оновлення
       };
+      // Зберігаємо снапшот оригінальних даних для відстеження змін
+      saveRowSnapshot(rowObj);
+      return rowObj;
     });
   } catch (e) {
     // console.error("Помилка завантаження записів sclad:", e);
@@ -2530,7 +2692,73 @@ async function loadScladPendingRecords(): Promise<any[]> {
   }
 }
 
+/** Застосувати фільтр кнопок + дат та перезавантажити таблицю */
+async function applyFilterAndReload(): Promise<void> {
+  const dateFrom =
+    (document.getElementById("filter-date-from-Excel") as HTMLInputElement)
+      ?.value || "";
+  const dateTo =
+    (document.getElementById("filter-date-to-Excel") as HTMLInputElement)
+      ?.value || "";
+
+  // Skeleton
+  const skeleton = document.getElementById("batch-skeleton-loader");
+  const tableContainer = document.getElementById("batch-table-container-Excel");
+  if (skeleton) skeleton.style.display = "block";
+  if (tableContainer) tableContainer.classList.add("hidden-all_other_bases");
+
+  originalSnapshotMap.clear();
+  const records = await loadScladFilteredRecords(
+    activeFilter,
+    dateFrom,
+    dateTo,
+  );
+
+  if (records.length > 0) {
+    parsedDataGlobal = records;
+  } else {
+    parsedDataGlobal = [createEmptyRow()];
+  }
+  renderBatchTable(parsedDataGlobal);
+
+  if (skeleton) skeleton.style.display = "none";
+  if (tableContainer) tableContainer.classList.remove("hidden-all_other_bases");
+  document
+    .getElementById("batch-upload-btn-Excel")
+    ?.classList.remove("hidden-all_other_bases");
+
+  // Скидаємо стан кнопки "Записати"
+  const uploadBtn = document.getElementById(
+    "batch-upload-btn-Excel",
+  ) as HTMLButtonElement | null;
+  if (uploadBtn) {
+    uploadBtn.removeAttribute("disabled");
+    uploadBtn.style.backgroundColor = "";
+    uploadBtn.style.cursor = "";
+    uploadBtn.textContent = "✅ Записати";
+  }
+
+  updateFilterButtonsActive();
+}
+
+/** Оновити візуальний стан активної кнопки фільтра */
+function updateFilterButtonsActive(): void {
+  const buttons = document.querySelectorAll(".batch-filter-btn-Excel");
+  buttons.forEach((btn) => {
+    const el = btn as HTMLElement;
+    if (el.dataset.filter === activeFilter) {
+      el.classList.add("active-filter-Excel");
+    } else {
+      el.classList.remove("active-filter-Excel");
+    }
+  });
+}
+
 async function resetModalState() {
+  // Очищуємо снапшоти та кеш актів при скиданні стану
+  originalSnapshotMap.clear();
+  actsDataCache.clear();
+
   const textarea = document.getElementById(
     "batch-textarea-Excel",
   ) as HTMLTextAreaElement;
@@ -2551,15 +2779,8 @@ async function resetModalState() {
   // Ховаємо кнопку "Розпарсити"
   if (parseBtn) parseBtn.style.display = "none";
 
-  // Завантажуємо записи з sclad (statys = 'Замовити' або 'Замовлено')
-  const pendingRecords = await loadScladPendingRecords();
-
-  // Якщо є записи з бази — показуємо їх, інакше порожній рядок
-  if (pendingRecords.length > 0) {
-    parsedDataGlobal = pendingRecords;
-  } else {
-    parsedDataGlobal = [createEmptyRow()];
-  }
+  // При відкритті — порожня таблиця, нічого не підтягуємо
+  parsedDataGlobal = [createEmptyRow()];
   renderBatchTable(parsedDataGlobal);
 
   // Показуємо таблицю та кнопку "Завантажити"
@@ -2593,6 +2814,7 @@ async function uploadBatchData(data: any[]) {
 
   let successCount = 0;
   let errorCount = 0;
+  let skippedCount = 0;
   scladIdsMap.clear();
 
   // --- локальні хелпери (self-contained) ---
@@ -2709,7 +2931,13 @@ async function uploadBatchData(data: any[]) {
       }
     }
 
-    // 5) Обробка кожного рядка
+    // 5) Обробка кожного рядка — зі smart diff (тільки змінені поля)
+    // Збираємо дані для батч-оновлення актів
+    const actUpdatesMap: Map<
+      string,
+      Array<{ rowIndex: number; scladIdWeb: string | null; detailForAct: any }>
+    > = new Map();
+
     for (let i = 0; i < data.length; i++) {
       const row = data[i];
 
@@ -2766,7 +2994,6 @@ async function uploadBatchData(data: any[]) {
           if (parsedDataGlobal[skipDomIdx])
             parsedDataGlobal[skipDomIdx].status = "🗑️ Пропущено";
         }
-        await new Promise((resolve) => setTimeout(resolve, 50));
         continue;
       }
 
@@ -2774,47 +3001,39 @@ async function uploadBatchData(data: any[]) {
       const isExistingRecord = !!row._scladId;
 
       let scladSuccess = false;
+      let rowSkipped = false; // true якщо рядок без змін — пропущений
 
       if (isExistingRecord) {
-        // Пряме оновлення існуючого запису через supabase
-        try {
-          // Якщо статус "Прибула" — очищаємо поле statys
-          const statysValue =
-            row.orderStatus === "Прибула" ? null : row.orderStatus || null;
+        // === SMART DIFF: порівнюємо зі снапшотом, оновлюємо тільки змінені поля ===
+        const changedFields = getChangedScladFields(
+          row,
+          dbDate,
+          slyusarIdForRow,
+        );
 
-          const updatePayload: Record<string, any> = {
-            time_on: dbDate || null,
-            shops: row.shop || null,
-            part_number: row.catno || null,
-            name: row.detail || null,
-            kilkist_on: parseFloat(row.qty) || 0,
-            price: parseFloat(row.price) || 0,
-            rahunok: row.invoice || null,
-            unit_measurement: row.unit || null,
-            akt: row.actNo || null,
-            scladNomer: row.warehouse ? parseFloat(row.warehouse) : null,
-            statys: statysValue,
-            prumitka: row.notes || null,
-            xto_zamovuv: slyusarIdForRow || null,
-          };
+        if (changedFields === null) {
+          // Нічого не змінилось — пропускаємо запис у sclad
+          scladSuccess = true;
+          rowSkipped = true;
+          skippedCount++;
+        } else {
+          // Є зміни — оновлюємо тільки змінені поля
+          try {
+            const { error: updateError } = await supabase
+              .from("sclad")
+              .update(changedFields)
+              .eq("sclad_id", row._scladId);
 
-          const { error: updateError } = await supabase
-            .from("sclad")
-            .update(updatePayload)
-            .eq("sclad_id", row._scladId);
-
-          if (updateError) {
-            // console.error(
-            // `Помилка оновлення sclad_id=${row._scladId}:`,
-            // updateError,
-            // );
+            scladSuccess = !updateError;
+            if (updateError) {
+              console.error(
+                `Помилка оновлення sclad_id=${row._scladId}:`,
+                updateError,
+              );
+            }
+          } catch (err) {
             scladSuccess = false;
-          } else {
-            scladSuccess = true;
           }
-        } catch (err) {
-          // console.error(`Помилка оновлення sclad_id=${row._scladId}:`, err);
-          scladSuccess = false;
         }
       } else {
         // === Новий рядок (без _scladId) — INSERT через handleScladCrud ===
@@ -2920,9 +3139,10 @@ async function uploadBatchData(data: any[]) {
         }
       }
 
-      // оновлення акта (за наявності)
-      let actSuccess = true;
-      if (row.actNo && row.actNo.trim()) {
+      // Збираємо деталі для батч-оновлення актів
+      // Якщо рядок без змін (rowSkipped) — акт вже має ці дані, не чіпаємо
+      const domRowIndex = (row.rowNumber || i + 1) - 1;
+      if (!rowSkipped && row.actNo && row.actNo.trim()) {
         const actNo = row.actNo.trim();
         const detailSum = (row.clientPrice || 0) * (row.qty || 0);
         const detailForAct = {
@@ -2934,28 +3154,26 @@ async function uploadBatchData(data: any[]) {
           Магазин: row.shop,
           Кількість: row.qty || 0,
         };
-        actSuccess = await updateActWithDetails(actNo, detailForAct);
-        if (!actSuccess) {
-          console.warn(
-            `Не вдалося оновити акт №${actNo} для рядка ${row.rowNumber}`,
-          );
+        if (!actUpdatesMap.has(actNo)) {
+          actUpdatesMap.set(actNo, []);
         }
+        actUpdatesMap
+          .get(actNo)!
+          .push({ rowIndex: domRowIndex, scladIdWeb, detailForAct });
       }
 
-      // Індекс рядка в DOM (rowNumber = 1-based)
-      const domRowIndex = (row.rowNumber || i + 1) - 1;
-
-      if (scladSuccess && actSuccess) {
+      // Статус рядка
+      if (scladSuccess) {
         successCount++;
-        updateRowStatus(domRowIndex, true, "✅ Успішно");
-        if (parsedDataGlobal[domRowIndex])
-          parsedDataGlobal[domRowIndex].status = "✅ Успішно";
-      } else if (scladSuccess && !actSuccess) {
-        successCount++;
-        updateRowStatus(domRowIndex, true, "⚠️ Збережено (акт не оновлено)");
-        if (parsedDataGlobal[domRowIndex])
-          parsedDataGlobal[domRowIndex].status =
-            "⚠️ Збережено (акт не оновлено)";
+        if (rowSkipped) {
+          updateRowStatus(domRowIndex, true, "⏭️ Без змін");
+          if (parsedDataGlobal[domRowIndex])
+            parsedDataGlobal[domRowIndex].status = "⏭️ Без змін";
+        } else {
+          updateRowStatus(domRowIndex, true, "✅ Успішно");
+          if (parsedDataGlobal[domRowIndex])
+            parsedDataGlobal[domRowIndex].status = "✅ Успішно";
+        }
       } else {
         errorCount++;
         updateRowStatus(domRowIndex, false, "❌ Помилка");
@@ -2963,8 +3181,26 @@ async function uploadBatchData(data: any[]) {
           parsedDataGlobal[domRowIndex].status = "❌ Помилка";
       }
 
-      // маленька пауза, щоб не “забивати” UI
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      // Пауза кожні 10 рядків
+      if (i % 10 === 9) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+    }
+
+    // 6) Батч-оновлення актів — кожен акт завантажуємо/зберігаємо лише раз
+    for (const [actNo, details] of actUpdatesMap) {
+      const actSuccess = await batchUpdateActWithDetails(
+        actNo,
+        details.map((d) => d.detailForAct),
+      );
+      if (!actSuccess) {
+        for (const { rowIndex } of details) {
+          updateRowStatus(rowIndex, true, "⚠️ Збережено (акт не оновлено)");
+          if (parsedDataGlobal[rowIndex])
+            parsedDataGlobal[rowIndex].status =
+              "⚠️ Збережено (акт не оновлено)";
+        }
+      }
     }
   } finally {
     // знімаємо лоадінг
@@ -2980,13 +3216,17 @@ async function uploadBatchData(data: any[]) {
       uploadBtn.style.cursor = "not-allowed";
       uploadBtn.textContent = "✅ Записано";
     }
-    showNotification(
-      `Успішно завантажено ${successCount} ${
-        successCount === 1 ? "запис" : successCount < 5 ? "записи" : "записів"
-      }`,
-      "success",
-      4000,
-    );
+    const totalMsg =
+      skippedCount > 0
+        ? `Успішно: ${successCount} (${skippedCount} без змін — пропущено)`
+        : `Успішно завантажено ${successCount} ${
+            successCount === 1
+              ? "запис"
+              : successCount < 5
+                ? "записи"
+                : "записів"
+          }`;
+    showNotification(totalMsg, "success", 4000);
   } else {
     // Є помилки - розблоковуємо кнопку для повторної спроби
     uploadBtn?.removeAttribute("disabled");
@@ -3153,6 +3393,41 @@ export function initBatchImport() {
       // 5. Ховаємо skeleton, показуємо таблицю
       if (skeleton) skeleton.style.display = "none";
     };
+  }
+
+  // === Кнопки фільтрації статусу ===
+  const filterButtons = document.querySelectorAll(".batch-filter-btn-Excel");
+  filterButtons.forEach((btn) => {
+    (btn as HTMLButtonElement).onclick = async () => {
+      activeFilter =
+        (btn as HTMLElement).dataset.filter || "Замовити+Замовлено";
+      await applyFilterAndReload();
+    };
+  });
+
+  // Календарні фільтри (від — до)
+  const dateFromInput = document.getElementById(
+    "filter-date-from-Excel",
+  ) as HTMLInputElement | null;
+  const dateToInput = document.getElementById(
+    "filter-date-to-Excel",
+  ) as HTMLInputElement | null;
+  if (dateFromInput) {
+    dateFromInput.onchange = () => applyFilterAndReload();
+  }
+  if (dateToInput) {
+    dateToInput.onchange = () => applyFilterAndReload();
+  }
+
+  // Позначаємо активну кнопку при ініціалізації
+  updateFilterButtonsActive();
+
+  // Ініціалізуємо кастомний DatePicker для фільтрових дат
+  const filterBar = document.querySelector(
+    ".batch-filter-bar-Excel",
+  ) as HTMLElement | null;
+  if (filterBar) {
+    initCustomDatePicker(filterBar);
   }
 
   const closeBtn = document.querySelector(

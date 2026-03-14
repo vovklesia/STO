@@ -166,6 +166,7 @@ export async function printModalToPdf(): Promise<void> {
     document.getElementById("create-invoice-btn") as HTMLElement,
     // <--- КІНЕЦЬ ДОДАНОГО
 
+    document.getElementById("voice-input-button") as HTMLElement, // Приховуємо кнопку голосового введення
     document.querySelector(".modal-close-button") as HTMLElement,
     document.querySelector(".modal-footer") as HTMLElement,
     document.querySelector(".act-pruimalnyk-info") as HTMLElement, // <--- Приховуємо ім'я приймальника

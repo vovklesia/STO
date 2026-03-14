@@ -829,6 +829,12 @@
   &--counting {
     pointer-events: auto;
     animation: pulse-red 1s infinite;
+
+    &:hover .ai-planner-delete-countdown {
+      background: #66d9a0;
+      box-shadow: 0 0 8px rgba(102, 217, 160, 0.6);
+      cursor: pointer;
+    }
   }
 
   &--generate {

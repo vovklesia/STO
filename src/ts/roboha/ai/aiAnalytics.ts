@@ -500,12 +500,7 @@ export async function recommendSlyusar(
 export function getAnalyticsToolDeclaration(): any {
   return {
     name: "get_analytics",
-    description: `Отримує аналітичні звіти по СТО. Доступні типи аналітики:
-- vip_clients: Топ VIP-клієнтів за виручкою (ім'я, сума, візити, VIP-рівень)
-- slyusar_ranking: Рейтинг слюсарів (виручка, кількість актів, спеціалізація, завантаженість)
-- financial_report: Фінансовий звіт (виручка, витрати, прибуток, маржа, тренди порівняно з минулим періодом)
-- recommend_slyusar: Рекомендація слюсаря для певного типу робіт (за спеціалізацією, рейтингом та завантаженістю)
-Використовуй коли питають: "топ клієнти", "VIP", "рейтинг слюсарів", "фінансовий звіт", "хто вільний?", "кому дати цю роботу?"`,
+    description: `Аналітичні звіти СТО: vip_clients(топ клієнтів), slyusar_ranking(рейтинг), financial_report(фінзвіт), recommend_slyusar(рекомендація слюсаря).`,
     parameters: {
       type: "object",
       properties: {
@@ -521,18 +516,16 @@ export function getAnalyticsToolDeclaration(): any {
         },
         period_days: {
           type: "integer",
-          description:
-            "Період аналізу в днях (за замовчуванням: 365 для VIP-клієнтів, 30 для решти). Наприклад: 7, 30, 90, 365",
+          description: "Період днів (замовч: VIP=365, інші=30)",
         },
         work_type: {
           type: "string",
           description:
-            'Тип робіт для recommend_slyusar. Наприклад: "Двигун", "Ходова", "Електрика", "ТО", "Діагностика"',
+            'Тип робіт для recommend_slyusar: "Двигун","Ходова","Електрика"',
         },
         top_n: {
           type: "integer",
-          description:
-            "Кількість записів у топі (за замовчуванням 20 для VIP, без ліміту для решти)",
+          description: "К-сть записів у топі (замовч 20)",
         },
       },
       required: ["analytics_type"],

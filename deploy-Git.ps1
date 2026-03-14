@@ -1,10 +1,24 @@
-$ErrorActionPreference = "Stop"
+﻿$ErrorActionPreference = "Stop"
 $Root = $PSScriptRoot
 Set-Location -LiteralPath $Root
 
 # Set console encoding for Ukrainian
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
+
+# Читаємо Supabase project-ref з .env
+$SUPABASE_PROJECT_REF = ""
+if (Test-Path ".env") {
+    $envLine = Get-Content ".env" | Where-Object { $_ -match '^VITE_SUPABASE_URL=' }
+    if ($envLine -match 'https://([^.]+)\.supabase\.co') {
+        $SUPABASE_PROJECT_REF = $Matches[1]
+    }
+}
+if (-not $SUPABASE_PROJECT_REF) {
+    Write-Host "❌ Не вдалося отримати Supabase project-ref з .env" -ForegroundColor Red
+    exit 1
+}
+Write-Host "🔑 Supabase project-ref: $SUPABASE_PROJECT_REF" -ForegroundColor Cyan
 
 Write-Host "========================================"
 Write-Host "  Auto Deploy: Git Push -> Vercel"
@@ -19,7 +33,7 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
 $gitAccounts = @(
-    @{ Name = "Veron3373 (GitHub)"; Email = "veron3373@gmail.com"; Username = "Veron3373" }
+    @{ Name = "vovklesia (GitHub)"; Email = "vovklesia2018@gmail.com"; Username = "vovklesia" }
 )
 
 # Create form
@@ -136,21 +150,21 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host "[4/4] Deploying Supabase Edge Functions..."
-npx supabase functions deploy telegram-bot --no-verify-jwt --project-ref eksifjzzszcqsufwcbsx
+npx supabase functions deploy telegram-bot --no-verify-jwt --project-ref $SUPABASE_PROJECT_REF
 if ($LASTEXITCODE -ne 0) {
     Write-Host "⚠️ telegram-bot deploy failed (non-critical)" -ForegroundColor Yellow
 } else {
     Write-Host "✅ telegram-bot deployed!" -ForegroundColor Green
 }
 
-npx supabase functions deploy check-reminders --no-verify-jwt --project-ref eksifjzzszcqsufwcbsx
+npx supabase functions deploy check-reminders --no-verify-jwt --project-ref $SUPABASE_PROJECT_REF
 if ($LASTEXITCODE -ne 0) {
     Write-Host "⚠️ check-reminders deploy failed (non-critical)" -ForegroundColor Yellow
 } else {
     Write-Host "✅ check-reminders deployed!" -ForegroundColor Green
 }
 
-npx supabase functions deploy send-telegram --no-verify-jwt --project-ref eksifjzzszcqsufwcbsx
+npx supabase functions deploy send-telegram --no-verify-jwt --project-ref $SUPABASE_PROJECT_REF
 if ($LASTEXITCODE -ne 0) {
     Write-Host "⚠️ send-telegram deploy failed (non-critical)" -ForegroundColor Yellow
 } else {
@@ -161,5 +175,5 @@ Write-Host "[5/5] DONE!"
 Write-Host ""
 Write-Host "========================================"
 Write-Host "  ✅ DEPLOYMENT STARTED"
-Write-Host "  - GitHub Pages: https://veron3373.github.io/STO/"
+Write-Host "  - Supabase: $SUPABASE_PROJECT_REF"
 Write-Host "========================================"

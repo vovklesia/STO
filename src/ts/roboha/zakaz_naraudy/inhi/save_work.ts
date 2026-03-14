@@ -154,8 +154,8 @@ async function fetchPrevWorksFromSlyusars(actId: number): Promise<
 
     if (error || !slyusars) {
       // console.warn(
-        // "fetchPrevWorksFromSlyusars: помилка отримання слюсарів:",
-        // error,
+      // "fetchPrevWorksFromSlyusars: помилка отримання слюсарів:",
+      // error,
       // );
       return out;
     }
@@ -327,30 +327,21 @@ async function syncSlyusarsHistoryForAct(params: {
       dayBucket.push(actEntry);
     }
 
-    // Створюємо новий масив записів, зберігаючи стару дату та "Розраховано" для незмінних робіт
+    // ✅ ОПТИМІЗОВАНО: Зливаємо нові дані в старі записи замість повної перезапису.
+    // Це гарантує збереження "Записано", "Розраховано" та БУДЬ-ЯКИХ інших полів.
     const prevWorks = Array.isArray(actEntry["Записи"])
       ? actEntry["Записи"]
       : [];
 
-    // ✅ КРИТИЧНО: Створюємо Map для пошуку за recordId (єдиний правильний спосіб)
+    // Будуємо Map за recordId для швидкого пошуку старого запису
     const prevWorksById = new Map<string, any>();
-
     for (const pw of prevWorks) {
-      // За recordId (найточніший і єдиний спосіб)
       if (pw.recordId) {
         prevWorksById.set(pw.recordId, pw);
       }
     }
 
-    const zapis: Array<{
-      Ціна: number;
-      Кількість: number;
-      Робота: string;
-      Зарплата: number;
-      Записано: string;
-      Розраховано?: string;
-      recordId: string; // ✅ Унікальний ID запису
-    }> = [];
+    const zapis: any[] = [];
     let summaRob = 0;
 
     for (let idx = 0; idx < rows.length; idx++) {
@@ -363,81 +354,71 @@ async function syncSlyusarsHistoryForAct(params: {
         ? expandNameForSave(workName)
         : workName;
 
-      // ✅ ВИПРАВЛЕНО: recordId береться з об'єкта WorkRow (передається з processItems)
       const currentRecordId = r.recordId || "";
-      let sourceForDates: any = null;
 
-      // ✅ ГОЛОВНИЙ СПОСІБ: Пошук за recordId (унікальний і точний)
-      // recordId гарантує що ми знаходимо саме той запис, який редагуємо
-      // ВАЖЛИВО: НЕ шукаємо за назвою! Якщо recordId немає - це НОВИЙ запис,
-      // і він НЕ повинен наслідувати "Розраховано" від інших записів з такою ж назвою.
+      // Шукаємо попередній запис ТІЛЬКИ за recordId
+      const prevRecord: any =
+        currentRecordId && prevWorksById.has(currentRecordId)
+          ? prevWorksById.get(currentRecordId)
+          : null;
 
-      // ЄДИНИЙ СПОСІБ: Пошук за recordId (найточніший і єдиний правильний)
-      if (currentRecordId && prevWorksById.has(currentRecordId)) {
-        sourceForDates = prevWorksById.get(currentRecordId);
-      }
-      // Якщо recordId немає - це новий запис, sourceForDates залишається null
-
-      // ✅ КРИТИЧНО: Зберігаємо дати з попереднього запису (якщо знайдено)
-      // Це гарантує, що "Записано" та "Розраховано" НІКОЛИ не втрачаються
-      let recordedDate = sourceForDates?.Записано || null;
-      let calculatedDate = sourceForDates?.Розраховано || null;
-
-      // ✅ ВИПРАВЛЕНО v4.0: Визначаємо recordId
-      // ПРІОРИТЕТ: DOM → попередній запис → генерувати новий
+      // Визначаємо recordId
       let recordId = "";
-
-      // 1. ГОЛОВНИЙ: беремо з DOM (він вже унікальний і прив'язаний до рядка)
       if (currentRecordId) {
         recordId = currentRecordId;
-      }
-      // 2. Якщо в DOM немає - беремо з попереднього запису (для міграції старих даних)
-      else if (sourceForDates?.recordId) {
-        recordId = sourceForDates.recordId;
-      }
-      // 3. Якщо немає ніде - генеруємо новий (для нових робіт)
-      else {
+      } else if (prevRecord?.recordId) {
+        recordId = prevRecord.recordId;
+      } else {
         recordId = `${params.actId}_${slyusarName}_${idx}_${Date.now()}`;
       }
 
-      // Якщо робота нова — ставимо нову дату запису
-      if (!recordedDate) {
+      // ✅ MERGE: починаємо зі старого запису → зберігаємо ВСІ існуючі поля
+      // (Записано, Розраховано, та будь-які майбутні поля залишаються недоторканими)
+      const newRecord: any = prevRecord ? { ...prevRecord } : {};
+
+      // Перезаписуємо ЛИШЕ ті поля, що йдуть з поточного збереження
+      newRecord.recordId = recordId;
+      newRecord.Ціна = price;
+      newRecord.Кількість = qty;
+      newRecord.Робота = fullWorkName;
+      newRecord.Зарплата = zp;
+
+      // "Записано" встановлюємо ТІЛЬКИ якщо його ще немає (новий запис)
+      if (!newRecord.Записано) {
         const now = new Date();
         const day = String(now.getDate()).padStart(2, "0");
         const month = String(now.getMonth() + 1).padStart(2, "0");
         const year = now.getFullYear();
-        recordedDate = `${day}.${month}.${year}`;
+        newRecord.Записано = `${day}.${month}.${year}`;
       }
-
-      const newRecord: any = {
-        recordId: recordId, // ✅ Завжди зберігаємо recordId ПЕРШИМ
-        Ціна: price,
-        Кількість: qty,
-        Робота: fullWorkName,
-        Зарплата: zp,
-        Записано: recordedDate,
-      };
-
-      // ✅ КРИТИЧНО: Додаємо "Розраховано" якщо воно було в попередньому записі
-      // Це гарантує що дата виплати НІКОЛИ не втрачається при редагуванні
-      if (calculatedDate) {
-        newRecord.Розраховано = calculatedDate;
-      }
+      // "Розраховано" — НІКОЛИ не чіпаємо (зберігається через spread)
 
       zapis.push(newRecord);
       summaRob += price * qty;
     }
 
-    actEntry["Записи"] = zapis;
-    actEntry["СуммаРоботи"] = Math.max(
+    // ✅ ОПТИМІЗАЦІЯ: оновлюємо БД тільки якщо дані реально змінились
+    const newSumma = Math.max(
       0,
       Math.round((summaRob + Number.EPSILON) * 100) / 100,
     );
-    actEntry["ДатаЗакриття"] = params.dateClose;
-    actEntry["Клієнт"] = params.clientInfo;
-    actEntry["Автомобіль"] = params.carInfo;
 
-    await updateSlyusarJson(slyRow);
+    const zapisChanged =
+      JSON.stringify(prevWorks) !== JSON.stringify(zapis) ||
+      actEntry["СуммаРоботи"] !== newSumma ||
+      actEntry["ДатаЗакриття"] !== params.dateClose ||
+      actEntry["Клієнт"] !== params.clientInfo ||
+      actEntry["Автомобіль"] !== params.carInfo;
+
+    if (zapisChanged) {
+      actEntry["Записи"] = zapis;
+      actEntry["СуммаРоботи"] = newSumma;
+      actEntry["ДатаЗакриття"] = params.dateClose;
+      actEntry["Клієнт"] = params.clientInfo;
+      actEntry["Автомобіль"] = params.carInfo;
+
+      await updateSlyusarJson(slyRow);
+    }
   }
 
   // ✅ ВИПРАВЛЕНО: Очищення записів ПРИ ЗМІНІ СЛЮСАРЯ для конкретних робіт
@@ -633,6 +614,66 @@ export async function closeActAndMarkSlyusars(actId: number): Promise<void> {
       }
     }
 
+    // --- Оновлення ДатаЗакриття для Приймальника ---
+    const { data: actDataForClose } = await supabase
+      .from("acts")
+      .select("pruimalnyk")
+      .eq("act_id", actId)
+      .single();
+
+    if (actDataForClose?.pruimalnyk) {
+      const pruimRow = await fetchSlyusarByName(actDataForClose.pruimalnyk);
+      if (pruimRow) {
+        const pruimHistory = ensureSlyusarHistoryRoot(pruimRow);
+        for (const dk of Object.keys(pruimHistory)) {
+          const bucket = pruimHistory[dk];
+          if (!Array.isArray(bucket)) continue;
+          const entry = bucket.find(
+            (e: any) => String(e?.["Акт"]) === String(actId),
+          );
+          if (entry) {
+            entry["ДатаЗакриття"] = nowDateOnly;
+            await updateSlyusarJson(pruimRow);
+            break;
+          }
+        }
+      }
+    }
+
+    // --- Оновлення ДатаЗакриття для Запчастистів ---
+    const { data: allZapchForClose } = await supabase
+      .from("slyusars")
+      .select("slyusar_id, data");
+
+    if (allZapchForClose) {
+      for (const zRow of allZapchForClose) {
+        const zd =
+          typeof zRow.data === "string" ? JSON.parse(zRow.data) : zRow.data;
+        if (!zd || zd["Доступ"] !== "Запчастист") continue;
+        const zHist = zd["Історія"] || {};
+        let zModified = false;
+        for (const dk of Object.keys(zHist)) {
+          const bucket = zHist[dk];
+          if (!Array.isArray(bucket)) continue;
+          const entry = bucket.find(
+            (e: any) => String(e?.["Акт"]) === String(actId),
+          );
+          if (entry) {
+            entry["ДатаЗакриття"] = nowDateOnly;
+            zModified = true;
+            break;
+          }
+        }
+        if (zModified) {
+          zd["Історія"] = zHist;
+          await supabase
+            .from("slyusars")
+            .update({ data: zd })
+            .eq("slyusar_id", zRow.slyusar_id);
+        }
+      }
+    }
+
     showNotification(
       "Акт закрито. Дату закриття та дані клієнта оновлено у ПІБ.",
       "success",
@@ -686,6 +727,66 @@ export async function reopenActAndClearSlyusars(actId: number): Promise<void> {
         }
 
         await updateSlyusarJson(row);
+      }
+    }
+
+    // --- Очищення ДатаЗакриття для Приймальника ---
+    const { data: actDataForReopen } = await supabase
+      .from("acts")
+      .select("pruimalnyk")
+      .eq("act_id", actId)
+      .single();
+
+    if (actDataForReopen?.pruimalnyk) {
+      const pruimRow = await fetchSlyusarByName(actDataForReopen.pruimalnyk);
+      if (pruimRow) {
+        const pruimHistory = ensureSlyusarHistoryRoot(pruimRow);
+        for (const dk of Object.keys(pruimHistory)) {
+          const bucket = pruimHistory[dk];
+          if (!Array.isArray(bucket)) continue;
+          const entry = bucket.find(
+            (e: any) => String(e?.["Акт"]) === String(actId),
+          );
+          if (entry) {
+            entry["ДатаЗакриття"] = null;
+            await updateSlyusarJson(pruimRow);
+            break;
+          }
+        }
+      }
+    }
+
+    // --- Очищення ДатаЗакриття для Запчастистів ---
+    const { data: allZapchForReopen } = await supabase
+      .from("slyusars")
+      .select("slyusar_id, data");
+
+    if (allZapchForReopen) {
+      for (const zRow of allZapchForReopen) {
+        const zd =
+          typeof zRow.data === "string" ? JSON.parse(zRow.data) : zRow.data;
+        if (!zd || zd["Доступ"] !== "Запчастист") continue;
+        const zHist = zd["Історія"] || {};
+        let zModified = false;
+        for (const dk of Object.keys(zHist)) {
+          const bucket = zHist[dk];
+          if (!Array.isArray(bucket)) continue;
+          const entry = bucket.find(
+            (e: any) => String(e?.["Акт"]) === String(actId),
+          );
+          if (entry) {
+            entry["ДатаЗакриття"] = null;
+            zModified = true;
+            break;
+          }
+        }
+        if (zModified) {
+          zd["Історія"] = zHist;
+          await supabase
+            .from("slyusars")
+            .update({ data: zd })
+            .eq("slyusar_id", zRow.slyusar_id);
+        }
       }
     }
 

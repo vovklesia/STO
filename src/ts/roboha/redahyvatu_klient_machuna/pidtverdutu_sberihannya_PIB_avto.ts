@@ -1,6 +1,10 @@
 export const savePromptModalId = "save-prompt-modal";
 import { supabase } from "../../vxid/supabaseClient";
-import { getModalFormValues, userConfirmation } from "./vikno_klient_machuna";
+import {
+  getModalFormValues,
+  userConfirmation,
+  formSnapshot,
+} from "./vikno_klient_machuna";
 import { showNotification } from "../zakaz_naraudy/inhi/vspluvauhe_povidomlenna";
 
 // Створює модальне вікно підтвердження збереження
@@ -57,13 +61,24 @@ export function showSavePromptModal(): Promise<boolean> {
   });
 }
 
-// Видаляє авто з бази
+// Видаляє авто з бази (якщо є акти — soft delete, якщо ні — hard delete)
 async function deleteCarFromDatabase(carsId: string): Promise<void> {
-  const { error: _error } = await supabase
-    .from("cars")
-    .delete()
+  // Перевіряємо чи є акти у цього авто
+  const { count } = await supabase
+    .from("acts")
+    .select("act_id", { count: "exact", head: true })
     .eq("cars_id", carsId);
-  // if (_error) console.error("❌ Помилка видалення автомобіля:", _error.message);
+
+  if (count && count > 0) {
+    // Є акти — м'яке видалення
+    await supabase
+      .from("cars")
+      .update({ is_deleted: true })
+      .eq("cars_id", carsId);
+  } else {
+    // Немає актів — фізичне видалення
+    await supabase.from("cars").delete().eq("cars_id", carsId);
+  }
 }
 
 // Додає авто до клієнта
@@ -115,62 +130,29 @@ export async function saveClientAndCarToDatabase(): Promise<{
 
   // ➕ Створення нового автомобіля або зв'язування з існуючим клієнтом
   if (userConfirmation === "yes") {
-    // Перевіряємо, чи існує клієнт із таким ПІБ
-    const { data: existingClients, error: fetchError } = await supabase
-      .from("clients")
-      .select("client_id, data")
-      .ilike("data->>ПІБ", `%${values.fullName.trim()}%`);
-
-    if (fetchError) {
-      // console.error("❌ Помилка при пошуку клієнта:", fetchError.message);
-      return { client_id: null, cars_id: null };
-    }
-
     let finalClientId: string | null = null;
     let finalCarId: string | null = null;
 
-    if (existingClients && existingClients.length > 0) {
-      // Беремо першого співпадаючого клієнта
-      const existingClient = existingClients[0];
-      finalClientId = existingClient.client_id;
-      finalCarId = await addCarToDatabase(finalClientId!, values);
-
-      return { client_id: finalClientId, cars_id: finalCarId };
-    } else {
-      // Якщо клієнта немає, створюємо нового
-      const { data: insertedClient, error: insertClientError } = await supabase
+    // Перевіряємо по selectedClientId (client_id), а не по ПІБ
+    if (values.client_id) {
+      const { data: existingClient, error: fetchError } = await supabase
         .from("clients")
-        .insert({
-          data: {
-            ПІБ: values.fullName,
-            Телефон: values.phone,
-            Джерело: values.income,
-            Додаткові: values.extra,
-          },
-        })
         .select("client_id")
+        .eq("client_id", values.client_id)
         .single();
 
-      if (insertClientError || !insertedClient?.client_id) {
-        // console.error(
-        // "❌ Не вдалося створити клієнта:",
-        // insertClientError?.message
-        // );
-        return { client_id: null, cars_id: null };
+      if (!fetchError && existingClient) {
+        // Клієнт існує — додаємо лише авто
+        finalClientId = existingClient.client_id;
+        finalCarId = await addCarToDatabase(finalClientId!, values);
+        return { client_id: finalClientId, cars_id: finalCarId };
       }
-
-      finalClientId = insertedClient.client_id;
-      finalCarId = await addCarToDatabase(finalClientId!, values);
-
-      return { client_id: finalClientId, cars_id: finalCarId };
     }
-  }
 
-  // 🔁 Оновлення клієнта і автомобіля
-  if (userConfirmation === null && values.client_id) {
-    const { error: clientError } = await supabase
+    // Клієнта немає або client_id не вказаний — створюємо нового
+    const { data: insertedClient, error: insertClientError } = await supabase
       .from("clients")
-      .update({
+      .insert({
         data: {
           ПІБ: values.fullName,
           Телефон: values.phone,
@@ -178,14 +160,67 @@ export async function saveClientAndCarToDatabase(): Promise<{
           Додаткові: values.extra,
         },
       })
-      .eq("client_id", values.client_id);
+      .select("client_id")
+      .single();
 
-    if (clientError) {
-      // console.error("❌ Помилка оновлення клієнта:", clientError.message);
-    } else {
+    if (insertClientError || !insertedClient?.client_id) {
+      return { client_id: null, cars_id: null };
     }
 
-    if (values.cars_id) {
+    finalClientId = insertedClient.client_id;
+    finalCarId = await addCarToDatabase(finalClientId!, values);
+    return { client_id: finalClientId, cars_id: finalCarId };
+  }
+
+  // 🔁 Оновлення клієнта і автомобіля (тільки змінені поля)
+  if (userConfirmation === null && values.client_id) {
+    if (!values.client_id || !values.cars_id) {
+      return { client_id: null, cars_id: null };
+    }
+
+    // Порівнюємо зі снепшотом, визначаємо що змінилось
+    const snap = formSnapshot;
+    const clientChanged =
+      !snap ||
+      values.fullName !== snap.fullName ||
+      values.phone !== snap.phone ||
+      values.income !== snap.income ||
+      values.extra !== snap.extra;
+
+    const carChanged =
+      !snap ||
+      values.carModel !== snap.carModel ||
+      values.carNumber !== snap.carNumber ||
+      values.engine !== snap.engine ||
+      values.fuel !== snap.fuel ||
+      values.vin !== snap.vin ||
+      values.year !== snap.year ||
+      values.carCode !== snap.carCode;
+
+    if (!clientChanged && !carChanged) {
+      showNotification("Немає змін для збереження", "warning");
+      return { client_id: values.client_id, cars_id: values.cars_id };
+    }
+
+    if (clientChanged) {
+      const { error: clientError } = await supabase
+        .from("clients")
+        .update({
+          data: {
+            ПІБ: values.fullName,
+            Телефон: values.phone,
+            Джерело: values.income,
+            Додаткові: values.extra,
+          },
+        })
+        .eq("client_id", values.client_id);
+
+      if (clientError) {
+        // console.error("❌ Помилка оновлення клієнта:", clientError.message);
+      }
+    }
+
+    if (carChanged && values.cars_id) {
       const { error: carError } = await supabase
         .from("cars")
         .update({
@@ -203,9 +238,9 @@ export async function saveClientAndCarToDatabase(): Promise<{
 
       if (carError) {
         // console.error("❌ Помилка оновлення авто:", carError.message);
-      } else {
       }
     }
+
     return { client_id: values.client_id, cars_id: values.cars_id || null };
   }
 

@@ -54,9 +54,9 @@ export function getModalFormValues() {
   const get = (id: string) =>
     (
       document.getElementById(id) as
-      | HTMLInputElement
-      | HTMLTextAreaElement
-      | null
+        | HTMLInputElement
+        | HTMLTextAreaElement
+        | null
     )?.value || "";
   const phoneValue = get(phoneInputId);
   return {
@@ -114,6 +114,50 @@ export function setTransferredActComment(val: string) {
 }
 let currentAutocompletes: { [key: string]: any } = {};
 export let userConfirmation: "no" | "yes" | null = null;
+
+// --- СНЕПШОТ: зберігає первинні значення полів форми ---
+export interface FormSnapshot {
+  fullName: string;
+  phone: string;
+  carModel: string;
+  carNumber: string;
+  engine: string;
+  fuel: string;
+  vin: string;
+  year: string;
+  carCode: string;
+  income: string;
+  extra: string;
+}
+export let formSnapshot: FormSnapshot | null = null;
+
+export function captureFormSnapshot() {
+  const get = (id: string) =>
+    (
+      document.getElementById(id) as
+        | HTMLInputElement
+        | HTMLTextAreaElement
+        | HTMLSelectElement
+        | null
+    )?.value || "";
+  formSnapshot = {
+    fullName: get(clientInputId),
+    phone: get(phoneInputId),
+    carModel: get(carModelInputId),
+    carNumber: get(carNumberInputId),
+    engine: get(carEngineInputId),
+    fuel: get(carFuelInputId),
+    vin: get(carVinInputId),
+    year: get(carYearInputId),
+    carCode: get(carCodeInputId),
+    income: get(carIncomeInputId),
+    extra: get(extraInputId),
+  };
+}
+
+export function clearFormSnapshot() {
+  formSnapshot = null;
+}
 
 let allUniqueData: {
   carModels: string[];
@@ -464,7 +508,10 @@ export async function fillClientInfo(clientId: string) {
 }
 
 async function loadUniqueData() {
-  const { data: allCars } = await supabase.from("cars").select("data");
+  const { data: allCars } = await supabase
+    .from("cars")
+    .select("data")
+    .not("is_deleted", "is", true);
   const { data: allClients } = await supabase.from("clients").select("data");
   if (allCars) {
     const carModels = [
@@ -949,7 +996,16 @@ export async function showModalCreateSakazNarad() {
       }
       selectedClientId = null;
       selectedCarId = null;
-      userConfirmation = null;
+      // Скидаємо стан на ➕ (за замовчуванням) і візуальний стан кнопки
+      userConfirmation = "yes";
+      const toggle = document.getElementById(
+        "confirm-toggle",
+      ) as HTMLButtonElement | null;
+      if (toggle) {
+        toggle.textContent = "➕";
+        toggle.className = "confirm-button yes";
+        toggle.title = "Підтвердити";
+      }
       setupNormalAutocompletes();
     }
   });
@@ -978,7 +1034,8 @@ export async function showModalCreateSakazNarad() {
 
     const { data: allCars } = await supabase
       .from("cars")
-      .select("cars_id, client_id, data");
+      .select("cars_id, client_id, data")
+      .not("is_deleted", "is", true);
     allCarItems =
       allCars
         ?.map((c) => ({
@@ -1110,6 +1167,8 @@ export async function showModalCreateSakazNarad() {
           fillCarFields(selectedCar);
           selectedCarId = selectedCar.id;
         }
+        // Зберігаємо снепшот після заповнення всіх полів
+        captureFormSnapshot();
         setupCarAutocompletes(clientCars, selectedCar);
       },
       true,
@@ -1129,6 +1188,8 @@ export async function showModalCreateSakazNarad() {
       if (isLocked()) {
         if (car.id) selectedCarId = car.id;
         if (car.client_id) selectedClientId = car.client_id;
+        // Зберігаємо снепшот після заповнення всіх полів
+        captureFormSnapshot();
       } else {
       }
       const clientCars = getCarsForClient(car.client_id);
@@ -1139,7 +1200,7 @@ export async function showModalCreateSakazNarad() {
   };
   selectedClientId = null;
   selectedCarId = null;
-  userConfirmation = null;
+  // userConfirmation керується через applyState — НЕ скидаємо тут
   const setupNormalAutocompletes = () => {
     setupAutocomplete(
       clientInput,
@@ -1166,6 +1227,8 @@ export async function showModalCreateSakazNarad() {
             selectedClientId = selectedCar.client_id;
           }
         }
+        // Зберігаємо снепшот після заповнення всіх полів
+        captureFormSnapshot();
         const clientPhones = getPhonesForClient(selectedClient.id);
         setupCarAutocompletes(clientCars, selectedCar);
         setupPhoneAutocomplete(clientPhones);

@@ -327,22 +327,18 @@ export async function executeAIRpc(
 export function getQueryDatabaseToolDeclaration(): any {
   return {
     name: "query_database",
-    description: `Виконує SELECT-запит до бази даних СТО (PostgreSQL/Supabase). 
-Використовуй для отримання даних з таблиць: acts (акти/заказ-наряди), clients (клієнти), cars (авто), slyusars (працівники), sclad (склад/запчастини), post_arxiv (бронювання), vutratu (витрати), faktura (фактури), shops (постачальники), works (довідник робіт), details (довідник деталей), settings, post_category, post_name, incomes.
-JSONB поля (data) доступні через синтаксис: data->>'ПІБ', data->'Роботи'.
-⚠️ ТІЛЬКИ читання (SELECT). Тільки дозволені таблиці.`,
+    description: `SELECT-запит до БД СТО. Таблиці: acts,clients,cars,slyusars,sclad,post_arxiv,vutratu,faktura,shops,works,details,settings,post_category,post_name,incomes. JSONB: data->>'ПІБ'. Тільки SELECT.`,
     parameters: {
       type: "object",
       properties: {
         table: {
           type: "string",
-          description:
-            "Назва таблиці. Дозволені: acts, clients, cars, slyusars, sclad, post_category, post_name, post_arxiv, works, details, shops, vutratu, faktura, incomes, settings, act_changes_notifications, slusar_complete_notifications",
+          description: "Назва таблиці",
           enum: [...AI_ALLOWED_TABLES],
         },
         select: {
           type: "string",
-          description: `Колонки для вибірки. За замовчуванням "*". Приклади: "*", "act_id, date_on, date_off, data", "client_id, data->>'ПІБ' as pib"`,
+          description: `Колонки. "*" за замовч.`,
         },
         filters: {
           type: "array",
@@ -357,8 +353,7 @@ JSONB поля (data) доступні через синтаксис: data->>'П
               },
               operator: {
                 type: "string",
-                description:
-                  "Оператор порівняння: eq (=), neq (!=), gt (>), gte (>=), lt (<), lte (<=), like (LIKE), ilike (ILIKE без урахування регістру), is (IS NULL/TRUE/FALSE), in (IN), not (NOT IS)",
+                description: "eq/neq/gt/gte/lt/lte/like/ilike/is/in/not",
                 enum: [
                   "eq",
                   "neq",
@@ -376,7 +371,7 @@ JSONB поля (data) доступні через синтаксис: data->>'П
               value: {
                 type: "string",
                 description:
-                  'Значення для порівняння (завжди рядок). Для ilike: %шаблон%. Для is: "null". Для in: "val1,val2,val3". Для чисел: "123". Для дат: "2026-03-01"',
+                  'Значення (рядок). ilike:%шаблон%. is:"null". in:"v1,v2"',
               },
             },
             required: ["column", "operator", "value"],
@@ -384,18 +379,16 @@ JSONB поля (data) доступні через синтаксис: data->>'П
         },
         order_by: {
           type: "string",
-          description:
-            "Колонка для сортування. Наприклад: act_id, date_on, sclad_id, client_id",
+          description: "Сортувати за колонкою",
         },
         order_direction: {
           type: "string",
-          description: "Напрямок сортування",
+          description: "Напрямок",
           enum: ["asc", "desc"],
         },
         limit: {
           type: "integer",
-          description:
-            "Максимальна кількість рядків (1-500). За замовчуванням 100",
+          description: "Макс рядків (1-500). Замовч 100",
         },
       },
       required: ["table"],
@@ -409,8 +402,7 @@ JSONB поля (data) доступні через синтаксис: data->>'П
 export function getMultiQueryToolDeclaration(): any {
   return {
     name: "multi_query_database",
-    description:
-      "Виконує кілька SELECT-запитів паралельно (до 5 одночасно). Для зв'язування даних з різних таблиць. Наприклад: запит клієнтів + запит їхніх авто.",
+    description: "Кілька SELECT паралельно (до 5). Для зв'язування таблиць.",
     parameters: {
       type: "object",
       properties: {
@@ -471,8 +463,7 @@ export function getMultiQueryToolDeclaration(): any {
 export function getRpcToolDeclaration(): any {
   return {
     name: "call_rpc",
-    description: `Викликає серверну RPC-функцію PostgreSQL. Доступні функції:
-- get_db_size() — розмір бази даних у байтах`,
+    description: `RPC-функція PostgreSQL. get_db_size()→розмір БД`,
     parameters: {
       type: "object",
       properties: {

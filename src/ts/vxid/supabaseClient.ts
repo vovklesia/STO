@@ -1,9 +1,9 @@
 // src/ts/vxid/supabaseClient.ts
 import { createClient } from "@supabase/supabase-js";
+import { SUPABASE_CONFIG } from "../../config/project.config";
 
-// Vite автоматично завантажує змінні, що починаються з VITE_
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY;
+const SUPABASE_URL = SUPABASE_CONFIG.url;
+const SUPABASE_KEY = SUPABASE_CONFIG.anonKey;
 
 if (!SUPABASE_URL || !SUPABASE_KEY) {
   throw new Error("❌ Відсутні ключі Supabase у файлі .env");

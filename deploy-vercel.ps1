@@ -7,7 +7,7 @@ Set-Location -LiteralPath $Root
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
 Write-Host "========================================"
-Write-Host "  Deploy to Vercel - stobraclavec.vercel.app"
+Write-Host "  Deploy to Vercel - vovklesia.vercel.app"
 Write-Host "========================================"
 Write-Host ""
 
@@ -102,8 +102,7 @@ Write-Host "========================================"
 # ═══════════════════════════════════════════════════════════════════════════════
 
 $projects = @(
-    @{ Name = "sto"; Url = "https://stobraclavec.vercel.app" },
-    @{ Name = "stobraclavec"; Url = "https://stobraclavec.vercel.app" }
+    @{ Name = "sto"; Url = "https://vovklesia.vercel.app" }
 )
 
 # Create project selection form

@@ -3,6 +3,19 @@
 
 Write-Host "🚀 Starting GitHub Pages deployment..." -ForegroundColor Cyan
 
+# Читаємо GitHub username/repo з project.config.ts або setup_new_project.ps1
+# Для простоти читаємо з .env/setup скрипту
+$GITHUB_USERNAME = "vovklesia"
+$GITHUB_REPO = "STO"
+# Спробуємо прочитати актуальні значення з setup_new_project.ps1
+if (Test-Path "setup_new_project.ps1") {
+    $setupContent = Get-Content "setup_new_project.ps1" -Raw
+    if ($setupContent -match '\$GITHUB_USERNAME\s*=\s*"([^"]+)"') { $GITHUB_USERNAME = $Matches[1] }
+    if ($setupContent -match '\$GITHUB_REPO\s*=\s*"([^"]+)"') { $GITHUB_REPO = $Matches[1] }
+}
+$GITHUB_REPO_URL = "https://github.com/$GITHUB_USERNAME/$GITHUB_REPO.git"
+Write-Host "🔑 GitHub: $GITHUB_REPO_URL" -ForegroundColor Cyan
+
 # Step 1: Build the project
 Write-Host "`n📦 Building project for GitHub Pages..." -ForegroundColor Yellow
 npm run build:github
@@ -40,7 +53,7 @@ $commitMessage = "Deploy to GitHub Pages - $(Get-Date -Format 'yyyy-MM-dd HH:mm:
 git commit -m $commitMessage
 
 # Step 7: Add remote (if not exists)
-$remoteUrl = "https://github.com/Veron3373/STO.git"
+$remoteUrl = $GITHUB_REPO_URL
 $remoteExists = git remote | Select-String -Pattern "origin"
 
 if (-not $remoteExists) {
@@ -62,5 +75,5 @@ if ($LASTEXITCODE -ne 0) {
 Set-Location ..
 
 Write-Host "`n✅ Deployment completed successfully!" -ForegroundColor Green
-Write-Host "🌐 Your site will be available at: https://veron3373.github.io/STO/" -ForegroundColor Cyan
+Write-Host "🌐 Your site will be available at: https://$GITHUB_USERNAME.github.io/$GITHUB_REPO/" -ForegroundColor Cyan
 Write-Host "⏳ Note: It may take a few minutes for changes to appear." -ForegroundColor Yellow

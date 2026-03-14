@@ -85,6 +85,9 @@ const fullRowDataCache = new Map<string, ParsedItem>();
 // КЕШ: Закупівельні ціни зі складу для обчислення маржі
 const purchasePricesCache = new Map<number, number>();
 
+// 🔒 Захист від подвійного збереження
+let isSaving = false;
+
 /* =============================== УТИЛІТИ =============================== */
 
 /**
@@ -550,48 +553,20 @@ async function updateScladAkt(
 async function applyScladDeltas(deltas: Map<number, number>): Promise<void> {
   if (deltas.size === 0) return;
 
-  const ids = Array.from(deltas.keys());
-  const { data: rows, error: selErr } = await supabase
-    .from("sclad")
-    .select("sclad_id, kilkist_off")
-    .in("sclad_id", ids);
+  // ✅ ВИПРАВЛЕНО: Атомарне оновлення kilkist_off через RPC (apply_sclad_delta)
+  // Це запобігає гонці запитів (race condition) при одночасних збереженнях
+  for (const [scladId, delta] of deltas) {
+    if (delta === 0) continue;
 
-  if (selErr) {
-    throw new Error(
-      `Не вдалося отримати склад для оновлення: ${selErr.message}`,
-    );
-  }
+    const { error: rpcErr } = await supabase.rpc("apply_sclad_delta", {
+      sid: scladId,
+      delta_val: delta,
+    });
 
-  const updates = ids
-    .map((id) => {
-      const row = rows?.find((r) => Number(r.sclad_id) === id);
-      if (!row) {
-        // console.warn(`Запис sclad_id=${id} не знайдено`);
-        return null;
-      }
-
-      const currentOff = Number(row.kilkist_off ?? 0);
-      const delta = Number(deltas.get(id) || 0);
-      // ✅ Прибрано Math.max(0, ...) - дозволяємо від'ємні значення kilkist_off
-      // Якщо видаляємо з акту, delta від'ємна → kilkist_off зменшується (повертаємо на склад)
-      const newOff = currentOff + delta;
-
-      return { sclad_id: id, kilkist_off: newOff };
-    })
-    .filter((update): update is NonNullable<typeof update> => update !== null);
-
-  if (updates.length > 0) {
-    for (const update of updates) {
-      const { error: upErr } = await supabase
-        .from("sclad")
-        .update({ kilkist_off: update.kilkist_off })
-        .eq("sclad_id", update.sclad_id);
-
-      if (upErr) {
-        throw new Error(
-          `Помилка оновлення складу №${update.sclad_id}: ${upErr.message}`,
-        );
-      }
+    if (rpcErr) {
+      throw new Error(
+        `Помилка оновлення складу №${scladId}: ${rpcErr.message}`,
+      );
     }
   }
 }
@@ -658,7 +633,7 @@ function processItems(items: ParsedItem[]) {
         `new_${name.substring(0, 20)}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
       // ✅ Шукаємо work_id в глобальному кеші за ім'ям роботи
-      const workObj = globalCache.worksWithId.find(w => w.name === name);
+      const workObj = globalCache.worksWithId.find((w) => w.name === name);
       const work_id = catalog || (workObj ? workObj.work_id : null);
 
       works.push({
@@ -698,7 +673,9 @@ function processItems(items: ParsedItem[]) {
       // ✅ Шукаємо detail_id в глобальному кеші для деталей не зі складу
       let detail_id = null;
       if (!sclad_id) {
-        const detailObj = globalCache.detailsWithId.find(d => d.name === name);
+        const detailObj = globalCache.detailsWithId.find(
+          (d) => d.name === name,
+        );
         if (detailObj) detail_id = detailObj.detail_id;
       }
 
@@ -1273,7 +1250,7 @@ async function syncPruimalnikHistory(
 
   // --- ЗБІР ДАНИХ З DOM ---
   const tableBody = document.querySelector<HTMLTableSectionElement>(
-    "№act-items-table-container tbody",
+    "#act-items-table-container tbody",
   );
 
   if (!tableBody) {
@@ -1729,198 +1706,206 @@ async function savePruimalnykToActs(actId: number): Promise<void> {
 }
 
 async function saveActData(actId: number, originalActData: any): Promise<void> {
+  if (isSaving) {
+    throw new Error("Збереження вже виконується, зачекайте...");
+  }
   if (globalCache.isActClosed) {
     throw new Error("Неможливо редагувати закритий акт");
   }
+  isSaving = true;
 
-  // Завантажуємо закупівельні ціни перед обробкою
-  await loadPurchasePrices();
-
-  const probigText = cleanText(
-    document.getElementById(EDITABLE_PROBIG_ID)?.textContent,
-  );
-  const probigCleaned = probigText.replace(/\s/g, "");
-  const newProbig =
-    probigCleaned && /^\d+$/.test(probigCleaned)
-      ? Number(probigCleaned)
-      : probigCleaned || 0;
-
-  const newReason =
-    (
-      document.getElementById(EDITABLE_REASON_ID) as HTMLElement
-    )?.innerText?.trim() || "";
-  const newRecommendations =
-    (
-      document.getElementById(EDITABLE_RECOMMENDATIONS_ID) as HTMLElement
-    )?.innerText?.trim() || "";
-  const newNotes =
-    (
-      document.getElementById(EDITABLE_NOTES_ID) as HTMLElement
-    )?.innerText?.trim() || "";
-
-  const items = parseTableRows();
-
-  // ⚠️ ПЕРЕВІРКА ДЛЯ СЛЮСАРЯ: він може зберігати зміни тільки в своїх рядках
-  if (userAccessLevel === "Слюсар" && userName) {
-    const originalItems = originalActData?.actItems || [];
-
-    // Перевіряємо, чи слюсар намагається змінити існуючі рядки
-    for (const item of items) {
-      // Знаходимо оригінальний рядок
-      const originalItem = originalItems.find(
-        (orig: any) =>
-          orig.Найменування === item.name && orig.Type === item.type,
-      );
-
-      // Якщо рядок існував раніше (не новий)
-      if (originalItem) {
-        const originalPib = originalItem.ПІБ_Магазин || "";
-
-        // Перевіряємо, чи це не його рядок
-        if (
-          originalPib &&
-          originalPib.toLowerCase() !== userName.toLowerCase()
-        ) {
-          throw new Error(
-            `⛔ Ви не можете змінювати рядок "${item.name}", оскільки він призначений іншому слюсарю (${originalPib})`,
-          );
-        }
-      }
-
-      // (Перевірка на призначення чужого ПІБ для слюсаря видалена за вимогою)
-    }
-  }
-
-  const {
-    details,
-    works,
-    detailRowsForShops,
-    workRowsForSlyusars,
-    newScladIds,
-    totalDetailsSum,
-    totalWorksSum,
-    grandTotalSum,
-    totalWorksProfit,
-    totalDetailsMargin,
-  } = processItems(items);
-
-  const avansInput = document.getElementById(
-    "editable-avans",
-  ) as HTMLInputElement;
-  const avansValue = avansInput
-    ? parseFloat(avansInput.value.replace(/\s/g, "") || "0")
-    : 0;
-
-  const discountInput = document.getElementById(
-    "editable-discount",
-  ) as HTMLInputElement;
-  const discountValue = discountInput
-    ? parseFloat(discountInput.value.replace(/\s/g, "") || "0")
-    : 0;
-
-  // Розраховуємо знижку від ВАЛУ (загальної суми), а НЕ від маржі
-  // Знижка застосовується до загальної суми продажу
-  const discountMultiplier = discountValue > 0 ? 1 - discountValue / 100 : 1;
-
-  // Сума продажу після знижки
-  const detailsSaleAfterDiscount = totalDetailsSum * discountMultiplier;
-  const worksSaleAfterDiscount = totalWorksSum * discountMultiplier;
-
-  // Маржа = сума продажу після знижки - собівартість (для деталей вже врахована в totalDetailsMargin)
-  // Для деталей: маржа = (продажна ціна - вхідна ціна) * кількість
-  // Після знижки: маржа = продажна ціна * (1 - знижка%) - вхідна ціна * кількість
-  // Це еквівалентно: (totalDetailsSum * discountMultiplier) - totalPurchasePrice
-  // Де totalPurchasePrice = totalDetailsSum - totalDetailsMargin
-
-  const totalPurchasePrice = totalDetailsSum - (totalDetailsMargin || 0);
-  const finalDetailsProfit = detailsSaleAfterDiscount - totalPurchasePrice;
-
-  // Для робіт: прибуток = сума продажу після знижки - зарплата слюсаря
-  // totalWorksProfit = totalWorksSum - зарплата слюсаря, тому зарплата = totalWorksSum - totalWorksProfit
-  const totalSlyusarSalary = totalWorksSum - (totalWorksProfit || 0);
-  const finalWorksProfit = worksSaleAfterDiscount - totalSlyusarSalary;
-
-  const updatedActData = {
-    ...(originalActData || {}),
-    Пробіг: newProbig,
-    "Причина звернення": newReason,
-    Рекомендації: newRecommendations,
-    Примітки: newNotes,
-    Деталі: details,
-    Роботи: works,
-    "За деталі": totalDetailsSum,
-    "За роботу": totalWorksSum,
-    "Загальна сума": grandTotalSum,
-    Аванс: avansValue,
-    Знижка: discountValue,
-    "Прибуток за деталі": Number(finalDetailsProfit.toFixed(2)),
-    "Прибуток за роботу": Number(finalWorksProfit.toFixed(2)),
-  };
-
-  const deltas = calculateDeltas();
-
-  showNotification("Збереження змін...", "info");
-
-  // 💾 Збереження даних акту (тільки JSONB, без окремих колонок)
-  const { error: updateError } = await supabase
-    .from("acts")
-    .update({
-      data: updatedActData,
-      avans: avansValue,
-    })
-    .eq("act_id", actId);
-
-  if (updateError) {
-    throw new Error(`Не вдалося оновити акт: ${updateError.message}`);
-  }
-
-  // ✅ Записуємо інформацію про приймальника
-  await savePruimalnykToActs(actId);
-
-  await updateScladActNumbers(actId, newScladIds);
-  await applyScladDeltas(deltas);
-  await syncShopsOnActSave(actId, detailRowsForShops);
-
-  // ✅ Завжди синхронізуємо зарплати та історію (saveMargins видалено)
-  await syncSlyusarsOnActSave(actId, workRowsForSlyusars);
-  await syncPruimalnikHistory(
-    actId,
-    totalWorksSum,
-    totalDetailsSum,
-    globalCache.currentActDateOn,
-    discountValue,
-  );
-
-  // ===== ЛОГУВАННЯ ЗМІН =====
   try {
-    const currentItems = items;
-    const { added, deleted } = compareActChanges(
-      globalCache.initialActItems || [],
-      currentItems,
+    // Завантажуємо закупівельні ціни перед обробкою
+    await loadPurchasePrices();
+
+    const probigText = cleanText(
+      document.getElementById(EDITABLE_PROBIG_ID)?.textContent,
     );
-    await logActChanges(actId, added, deleted);
-  } catch (logError) {
-    // console.error("⚠️ Помилка логування змін:", logError);
-    // Не блокуємо збереження через помилку логування
+    const probigCleaned = probigText.replace(/\s/g, "");
+    const newProbig =
+      probigCleaned && /^\d+$/.test(probigCleaned)
+        ? Number(probigCleaned)
+        : probigCleaned || 0;
+
+    const newReason =
+      (
+        document.getElementById(EDITABLE_REASON_ID) as HTMLElement
+      )?.innerText?.trim() || "";
+    const newRecommendations =
+      (
+        document.getElementById(EDITABLE_RECOMMENDATIONS_ID) as HTMLElement
+      )?.innerText?.trim() || "";
+    const newNotes =
+      (
+        document.getElementById(EDITABLE_NOTES_ID) as HTMLElement
+      )?.innerText?.trim() || "";
+
+    const items = parseTableRows();
+
+    // ⚠️ ПЕРЕВІРКА ДЛЯ СЛЮСАРЯ: він може зберігати зміни тільки в своїх рядках
+    if (userAccessLevel === "Слюсар" && userName) {
+      const originalItems = originalActData?.actItems || [];
+
+      // Перевіряємо, чи слюсар намагається змінити існуючі рядки
+      for (const item of items) {
+        // Знаходимо оригінальний рядок
+        const originalItem = originalItems.find(
+          (orig: any) =>
+            orig.Найменування === item.name && orig.Type === item.type,
+        );
+
+        // Якщо рядок існував раніше (не новий)
+        if (originalItem) {
+          const originalPib = originalItem.ПІБ_Магазин || "";
+
+          // Перевіряємо, чи це не його рядок
+          if (
+            originalPib &&
+            originalPib.toLowerCase() !== userName.toLowerCase()
+          ) {
+            throw new Error(
+              `⛔ Ви не можете змінювати рядок "${item.name}", оскільки він призначений іншому слюсарю (${originalPib})`,
+            );
+          }
+        }
+
+        // (Перевірка на призначення чужого ПІБ для слюсаря видалена за вимогою)
+      }
+    }
+
+    const {
+      details,
+      works,
+      detailRowsForShops,
+      workRowsForSlyusars,
+      newScladIds,
+      totalDetailsSum,
+      totalWorksSum,
+      grandTotalSum,
+      totalWorksProfit,
+      totalDetailsMargin,
+    } = processItems(items);
+
+    const avansInput = document.getElementById(
+      "editable-avans",
+    ) as HTMLInputElement;
+    const avansValue = avansInput
+      ? parseFloat(avansInput.value.replace(/\s/g, "") || "0")
+      : 0;
+
+    const discountInput = document.getElementById(
+      "editable-discount",
+    ) as HTMLInputElement;
+    const discountValue = discountInput
+      ? parseFloat(discountInput.value.replace(/\s/g, "") || "0")
+      : 0;
+
+    // Розраховуємо знижку від ВАЛУ (загальної суми), а НЕ від маржі
+    // Знижка застосовується до загальної суми продажу
+    const discountMultiplier = discountValue > 0 ? 1 - discountValue / 100 : 1;
+
+    // Сума продажу після знижки
+    const detailsSaleAfterDiscount = totalDetailsSum * discountMultiplier;
+    const worksSaleAfterDiscount = totalWorksSum * discountMultiplier;
+
+    // Маржа = сума продажу після знижки - собівартість (для деталей вже врахована в totalDetailsMargin)
+    // Для деталей: маржа = (продажна ціна - вхідна ціна) * кількість
+    // Після знижки: маржа = продажна ціна * (1 - знижка%) - вхідна ціна * кількість
+    // Це еквівалентно: (totalDetailsSum * discountMultiplier) - totalPurchasePrice
+    // Де totalPurchasePrice = totalDetailsSum - totalDetailsMargin
+
+    const totalPurchasePrice = totalDetailsSum - (totalDetailsMargin || 0);
+    const finalDetailsProfit = detailsSaleAfterDiscount - totalPurchasePrice;
+
+    // Для робіт: прибуток = сума продажу після знижки - зарплата слюсаря
+    // totalWorksProfit = totalWorksSum - зарплата слюсаря, тому зарплата = totalWorksSum - totalWorksProfit
+    const totalSlyusarSalary = totalWorksSum - (totalWorksProfit || 0);
+    const finalWorksProfit = worksSaleAfterDiscount - totalSlyusarSalary;
+
+    const updatedActData = {
+      ...(originalActData || {}),
+      Пробіг: newProbig,
+      "Причина звернення": newReason,
+      Рекомендації: newRecommendations,
+      Примітки: newNotes,
+      Деталі: details,
+      Роботи: works,
+      "За деталі": totalDetailsSum,
+      "За роботу": totalWorksSum,
+      "Загальна сума": grandTotalSum,
+      Аванс: avansValue,
+      Знижка: discountValue,
+      "Прибуток за деталі": Number(finalDetailsProfit.toFixed(2)),
+      "Прибуток за роботу": Number(finalWorksProfit.toFixed(2)),
+    };
+
+    const deltas = calculateDeltas();
+
+    showNotification("Збереження змін...", "info");
+
+    // 💾 Збереження даних акту (тільки JSONB, без окремих колонок)
+    const { error: updateError } = await supabase
+      .from("acts")
+      .update({
+        data: updatedActData,
+        avans: avansValue,
+      })
+      .eq("act_id", actId);
+
+    if (updateError) {
+      throw new Error(`Не вдалося оновити акт: ${updateError.message}`);
+    }
+
+    // ✅ Записуємо інформацію про приймальника
+    await savePruimalnykToActs(actId);
+
+    await updateScladActNumbers(actId, newScladIds);
+    await applyScladDeltas(deltas);
+    await syncShopsOnActSave(actId, detailRowsForShops);
+
+    // ✅ Завжди синхронізуємо зарплати та історію (saveMargins видалено)
+    await syncSlyusarsOnActSave(actId, workRowsForSlyusars);
+    await syncPruimalnikHistory(
+      actId,
+      totalWorksSum,
+      totalDetailsSum,
+      globalCache.currentActDateOn,
+      discountValue,
+    );
+
+    // ===== ЛОГУВАННЯ ЗМІН =====
+    try {
+      const currentItems = items;
+      const { added, deleted } = compareActChanges(
+        globalCache.initialActItems || [],
+        currentItems,
+      );
+      await logActChanges(actId, added, deleted);
+    } catch (logError) {
+      // console.error("⚠️ Помилка логування змін:", logError);
+      // Не блокуємо збереження через помилку логування
+    }
+    // =====================================
+
+    globalCache.oldNumbers = readTableNewNumbers();
+    updateInitialActItems(details, works);
+
+    // ✅ ВИПРАВЛЕНО: Інвалідуємо кеш перед завантаженням, щоб отримати свіжі дані з БД
+    // Це вирішує проблему, коли після збереження акту і повторного відкриття
+    // без перезавантаження сторінки дані зарплати не оновлювалися
+    invalidateGlobalDataCache();
+
+    await Promise.all([
+      loadGlobalData(),
+      refreshQtyWarningsIn(ACT_ITEMS_TABLE_CONTAINER_ID),
+      cleanupEmptyRows(),
+    ]);
+
+    updateCalculatedSumsInFooter();
+    refreshActsTable();
+  } finally {
+    isSaving = false;
   }
-  // =====================================
-
-  globalCache.oldNumbers = readTableNewNumbers();
-  updateInitialActItems(details, works);
-
-  // ✅ ВИПРАВЛЕНО: Інвалідуємо кеш перед завантаженням, щоб отримати свіжі дані з БД
-  // Це вирішує проблему, коли після збереження акту і повторного відкриття
-  // без перезавантаження сторінки дані зарплати не оновлювалися
-  invalidateGlobalDataCache();
-
-  await Promise.all([
-    loadGlobalData(),
-    refreshQtyWarningsIn(ACT_ITEMS_TABLE_CONTAINER_ID),
-    cleanupEmptyRows(),
-  ]);
-
-  updateCalculatedSumsInFooter();
-  refreshActsTable();
 }
 
 export function addSaveHandler(actId: number, originalActData: any): void {
@@ -1933,6 +1918,10 @@ export function addSaveHandler(actId: number, originalActData: any): void {
   saveButton.parentNode?.replaceChild(newSaveButton, saveButton);
 
   newSaveButton.addEventListener("click", async () => {
+    if (isSaving) {
+      showNotification("Збереження вже виконується, зачекайте...", "warning");
+      return;
+    }
     try {
       await saveActData(actId, originalActData);
 

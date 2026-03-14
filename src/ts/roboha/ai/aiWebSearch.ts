@@ -31,40 +31,25 @@ export interface WebSearchResponse {
 export function getSearchInternetToolDeclaration(): any {
   return {
     name: "search_internet",
-    description: `Шукає інформацію в інтернеті. ВИКОРИСТОВУЙ ЗАВЖДИ коли питають про запчастини, ціни, артикули. Використовуй для:
-- Пошук цін на автозапчастини на українських сайтах: elit.ua, exist.ua, avtopro.ua, avto.pro, omega.page, dok.ua, intercars.com.ua, busmarket.group, oiler.ua, atl.ua, vladislav.ua, autotechnics.ua, all-parts.com.ua, ukrparts.com.ua, evocar.ua, massive.ua, pitline.ua, starter.ms, ecat.ua, autoklad.ua
-- Пошук каталожних номерів (OEM артикулів) деталей
-- Порівняння цін між постачальниками
-- Пошук запчастин за VIN-кодом
-- Пошук аналогів деталей та сумісних замін
-- Перевірка наявності запчастин
-- Пошук технічних характеристик автомобілів
-- Пошук інструкцій з ремонту та технічної документації
-- Будь-яка інша інформація з інтернету
-
-ВАЖЛИВО: Коли користувач питає про запчастини, ціни, деталі — ВСТАНОВЛЮЙ auto_parts_mode=true для кращих результатів.`,
+    description: `Пошук в інтернеті. Коли питають запчастини/ціни/артикули → auto_parts_mode=true. Пріоритет: elit.ua,exist.ua,avtopro.ua,dok.ua,omega.page,intercars.com.ua`,
     parameters: {
       type: "object",
       properties: {
         query: {
           type: "string",
-          description:
-            "Пошуковий запит. Включай назву деталі, марку/модель авто, рік, об'єм двигуна. Наприклад: 'масляний фільтр Toyota Camry 2.5 2018', 'пильовик амортизатора BMW E46', 'аналог Mann W712/73'",
+          description: "Пошуковий запит (назва+марка+модель+рік)",
         },
         auto_parts_mode: {
           type: "boolean",
-          description:
-            "ВСТАНОВЛЮЙ true коли шукаєш запчастини, ціни, артикули, деталі — це звузить пошук до українських магазинів автозапчастин. За замовчуванням false.",
+          description: "true=запчастини/ціни, false=загальний пошук",
         },
         vin_code: {
           type: "string",
-          description:
-            "VIN-код автомобіля (17 символів). Використовуй для пошуку сумісних запчастин. Наприклад: 'JTEBU5JR5D5123456'",
+          description: "VIN-код (17 символів)",
         },
         sites: {
           type: "array",
-          description:
-            "Конкретні сайти для пошуку. Наприклад: ['elit.ua', 'exist.ua', 'dok.ua']",
+          description: "Конкретні сайти: ['elit.ua','exist.ua']",
           items: { type: "string" },
         },
       },

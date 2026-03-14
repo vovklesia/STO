@@ -2,7 +2,7 @@
 import { cacheHiddenColumnsData } from "./inhi/zberechennya_zmin_y_danux_aktu";
 import { supabase } from "../../vxid/supabaseClient";
 import { showNotification } from "./inhi/vspluvauhe_povidomlenna";
-import { subscribeToActPresence, lockActInterface } from "./actPresence";
+import { subscribeToActPresence } from "./actPresence";
 import {
   refreshPhotoData,
   safeParseJSON,
@@ -70,10 +70,7 @@ import { checkAndHighlightChanges } from "./inhi/act_changes_highlighter";
 import { removeNotificationsForAct } from "../tablucya/povidomlennya_tablucya";
 import { initVoiceInput } from "../ai/voiceInput";
 import { handleSmsButtonClick } from "../sms/sendActSMS";
-import {
-  refreshActsTable,
-  getActEditorFromPresence,
-} from "../tablucya/tablucya";
+import { refreshActsTable } from "../tablucya/tablucya";
 
 function initDeleteRowHandler(): void {
   const body = document.getElementById(ZAKAZ_NARAYD_BODY_ID);
@@ -328,7 +325,7 @@ const handleIndexIconClick = async (e: MouseEvent) => {
         createChoiceModal(
           () => runWorkLogic(), // On Work
           () => runPartLogic(), // On Part
-          () => { }, // On Cancel
+          () => {}, // On Cancel
         );
       } else {
         // showNotification("Функція недоступна", "warning"); // Опціонально можна розкоментувати
@@ -803,7 +800,11 @@ export async function showModal(
     for (const d of actDetails?.["Деталі"] || []) {
       const id = Number(d?.sclad_id);
       const qty = Number(d?.["Кількість"] ?? 0);
-      if (id) globalCache.oldNumbers.set(id, qty);
+      if (id)
+        globalCache.oldNumbers.set(
+          id,
+          (globalCache.oldNumbers.get(id) || 0) + qty,
+        );
     }
 
     renderModalContent(
@@ -872,20 +873,9 @@ export async function showModal(
     // 📢 ПІДПИСКА НА ЗМІНИ slusarsOn В РЕАЛЬНОМУ ЧАСІ (ОНОВЛЕННЯ ЗАГОЛОВКА)
     setupSlusarsOnRealtimeSubscription(actId);
 
-    // 🔐 ПІДПИСКА НА PRESENCE API ДЛЯ ВІДСТЕЖЕННЯ ПРИСУТНОСТІ КОРИСТУВАЧІВ
+    // 🔐 СЕРВЕРНИЙ LOCK АКТУ (acquire_act_lock)
     if (!skipPresence) {
-      // 🔐 ПОПЕРЕДНЯ ПЕРЕВІРКА: чи акт вже відкритий іншим користувачем (за глобальною мапою присутності)
-      // Це спрацьовує коли комп'ютер іншого користувача "заснув" і не зробив untrack
-      const existingEditor = getActEditorFromPresence(actId);
-      if (existingEditor) {
-        // Акт вже відкритий іншим користувачем - блокуємо одразу
-        lockActInterface(existingEditor);
-      }
-
-      // Перевіряємо чи акт вже відкритий іншим користувачем
-      // Передаємо колбек для оновлення даних при розблокуванні
       await subscribeToActPresence(actId, async () => {
-        // Викликаємо showModal з skipPresence=true, щоб оновити дані і не підписуватися знову
         await showModal(actId, clickSource, true);
       });
     }
@@ -1163,6 +1153,7 @@ async function fetchCarData(carId: number | null): Promise<any> {
     .from("cars")
     .select("data")
     .eq("cars_id", carId)
+    .not("is_deleted", "is", true)
     .single();
   return car?.data ? safeParseJSON(car.data) : null;
 }
@@ -1174,8 +1165,9 @@ function handleLoadError(error: any): void {
     "error",
   );
   if (body) {
-    body.innerHTML = `<p class="error-message">❌ Не вдалося завантажити акт. ${error?.message || "Перевірте підключення."
-      }</p>`;
+    body.innerHTML = `<p class="error-message">❌ Не вдалося завантажити акт. ${
+      error?.message || "Перевірте підключення."
+    }</p>`;
   }
 }
 
@@ -1234,17 +1226,24 @@ function renderModalContent(
 
       // ✅ Беремо recordId з acts.data.Деталі (якщо є) або undefined
       const recordId = item["recordId"] || undefined;
-      const sclad_id = showCatalog ? item["sclad_id"] || null : null;
+      // ✅ ВИПРАВЛЕНО: sclad_id завжди зберігається незалежно від showCatalog.
+      // Якщо обнуляти sclad_id коли showCatalog=false, то readTableNewNumbers() повертає
+      // порожню map, а oldNumbers має правильні значення з БД → дельта = -qty → kilkist_off зменшується.
+      const sclad_id = item["sclad_id"] || null;
       const detail_id = item["detail_id"] || null;
 
       // Якщо є detail_id і немає sclad_id, оновлюємо назву з кешу, раптом вона змінилася
       let finalDetailName = detailName;
       if (!sclad_id && detail_id) {
-        const cachedDetail = globalCache.detailsWithId.find(d => d.detail_id === detail_id);
+        const cachedDetail = globalCache.detailsWithId.find(
+          (d) => d.detail_id === detail_id,
+        );
         if (cachedDetail) finalDetailName = cachedDetail.name;
       } else if (sclad_id) {
         // Якщо зі складу, теж можна спробувати оновити назву
-        const scladPart = globalCache.skladParts.find(p => p.sclad_id === sclad_id);
+        const scladPart = globalCache.skladParts.find(
+          (p) => p.sclad_id === sclad_id,
+        );
         if (scladPart) finalDetailName = scladPart.name;
       }
 
@@ -1283,7 +1282,9 @@ function renderModalContent(
       // Якщо є work_id, оновлюємо назву з кешу, раптом вона змінилася
       let finalWorkName = workName;
       if (work_id) {
-        const cachedWork = globalCache.worksWithId.find(w => w.work_id === work_id);
+        const cachedWork = globalCache.worksWithId.find(
+          (w) => w.work_id === work_id,
+        );
         if (cachedWork) finalWorkName = cachedWork.name;
       }
 
@@ -1342,44 +1343,48 @@ function renderModalContent(
   const headerButtons = `
     <div class="zakaz_narayd-header-buttons">
       ${pruimalnykDisplay}
-      ${showLockButton
-      ? `<button class="status-lock-icon" id="status-lock-btn" data-act-id="${act.act_id}">
+      ${
+        showLockButton
+          ? `<button class="status-lock-icon" id="status-lock-btn" data-act-id="${act.act_id}">
                    ${isClosed ? "🔒" : "🗝️"}
                    </button>`
-      : ""
-    }
-      ${!isRestricted && canShowPrintActBtn
-      ? `<button id="print-act-button" title="Друк акту" class="print-button">🖨️</button>`
-      : ""
-    }
-      ${canShowSmsBtn
-      ? (() => {
-        let tooltip = "Немає SMS";
-        const isSent = !!act.sms;
-        if (isSent) {
-          try {
-            const dateString = String(act.sms).replace(" ", "T");
-            const d = new Date(dateString);
-            if (!isNaN(d.getTime())) {
-              const { date, time } = formatDateTime(d);
-              tooltip = `${time} / ${date}`;
-            } else {
-              tooltip = String(act.sms);
-            }
-          } catch {
-            tooltip = String(act.sms);
-          }
-        }
-        return !isSent
-          ? `<button class="status-lock-icon" id="sms-btn" data-act-id="${act.act_id}" title="${tooltip}">✉️</button>`
-          : `<button class="status-lock-icon" id="sms-btn" data-act-id="${act.act_id}" title="${tooltip}">📨</button>`;
-      })()
-      : ""
-    }
-      ${!isRestricted && canShowCreateActBtn
-      ? `<button type="button" class="status-lock-icon" id="create-act-btn" title="Акт Рахунок?">🗂️</button>`
-      : ""
-    }
+          : ""
+      }
+      ${
+        !isRestricted && canShowPrintActBtn
+          ? `<button id="print-act-button" title="Друк акту" class="print-button">🖨️</button>`
+          : ""
+      }
+      ${
+        canShowSmsBtn
+          ? (() => {
+              let tooltip = "Немає SMS";
+              const isSent = !!act.sms;
+              if (isSent) {
+                try {
+                  const dateString = String(act.sms).replace(" ", "T");
+                  const d = new Date(dateString);
+                  if (!isNaN(d.getTime())) {
+                    const { date, time } = formatDateTime(d);
+                    tooltip = `${time} / ${date}`;
+                  } else {
+                    tooltip = String(act.sms);
+                  }
+                } catch {
+                  tooltip = String(act.sms);
+                }
+              }
+              return !isSent
+                ? `<button class="status-lock-icon" id="sms-btn" data-act-id="${act.act_id}" title="${tooltip}">✉️</button>`
+                : `<button class="status-lock-icon" id="sms-btn" data-act-id="${act.act_id}" title="${tooltip}">📨</button>`;
+            })()
+          : ""
+      }
+      ${
+        !isRestricted && canShowCreateActBtn
+          ? `<button type="button" class="status-lock-icon" id="create-act-btn" title="Акт Рахунок?">🗂️</button>`
+          : ""
+      }
     </div>
   `;
 
@@ -1407,58 +1412,62 @@ function renderModalContent(
         ${createTableRow("Акт №", `<span id="act-number">${act.act_id}</span>`)}
         ${createTableRow("Клієнт", clientInfo.fio)}
         ${createTableRow(
-    "Телефон",
-    `<span style="color: blue;">${clientInfo.phone}</span>`,
-  )}
+          "Телефон",
+          `<span style="color: blue;">${clientInfo.phone}</span>`,
+        )}
         ${createTableRow("Примітка:", clientInfo.note)}
         ${createTableRow("Фото", photoCellHtml)}
       </table>
       <table class="zakaz_narayd-table right">
         ${createTableRow(
-    isClosed ? "Закритий" : "Відкритий",
-    `${isClosed
-      ? `<span class="red">${formatDate(act.date_off)}</span> | <span class="green">${formatDate(act.date_on)}</span>`
-      : `<span class="green">${formatDate(act.date_on) || "-"}</span>`
-    }`,
-  )}
+          isClosed ? "Закритий" : "Відкритий",
+          `${
+            isClosed
+              ? `<span class="red">${formatDate(act.date_off)}</span> | <span class="green">${formatDate(act.date_on)}</span>`
+              : `<span class="green">${formatDate(act.date_on) || "-"}</span>`
+          }`,
+        )}
         ${createTableRow(
-    "Автомобіль",
-    `${(carInfo.auto || "").trim()} ${(carInfo.year || "").trim()} ${(
-      carInfo.nomer || ""
-    ).trim()}`.trim() || "—",
-  )}
+          "Автомобіль",
+          `${(carInfo.auto || "").trim()} ${(carInfo.year || "").trim()} ${(
+            carInfo.nomer || ""
+          ).trim()}`.trim() || "—",
+        )}
         ${createTableRow("Vincode", carInfo.vin)}
         ${createTableRow("Двигун", carInfo.engine)}
         ${createTableRow(
-    "Пробіг",
-    `<span id="${EDITABLE_PROBIG_ID}" ${editableAttr} class="editable ${editableClass}">${formatNumberWithSpaces(
-      actDetails?.["Пробіг"],
-      0,
-      0,
-    )}</span>`,
-  )}
+          "Пробіг",
+          `<span id="${EDITABLE_PROBIG_ID}" ${editableAttr} class="editable ${editableClass}">${formatNumberWithSpaces(
+            actDetails?.["Пробіг"],
+            0,
+            0,
+          )}</span>`,
+        )}
       </table>
     </div>
     <div class="reason-container">
       <div class="zakaz_narayd-reason-line">
         <div class="reason-text">
           <strong>Причина звернення:</strong>
-          <span id="${EDITABLE_REASON_ID}" class="highlight editable ${editableClass}" ${editableAttr} style="white-space: pre-wrap;">${actDetails?.["Причина звернення"] || "—"
-    }</span>
+          <span id="${EDITABLE_REASON_ID}" class="highlight editable ${editableClass}" ${editableAttr} style="white-space: pre-wrap;">${
+            actDetails?.["Причина звернення"] || "—"
+          }</span>
         </div>
       </div>
       <div class="zakaz_narayd-reason-line">
         <div class="recommendations-text">
           <strong>Рекомендації:</strong>
-          <span id="${EDITABLE_RECOMMENDATIONS_ID}" class="highlight editable ${editableClass}" ${editableAttr} style="white-space: pre-wrap;">${actDetails?.["Рекомендації"] || "—"
-    }</span>
+          <span id="${EDITABLE_RECOMMENDATIONS_ID}" class="highlight editable ${editableClass}" ${editableAttr} style="white-space: pre-wrap;">${
+            actDetails?.["Рекомендації"] || "—"
+          }</span>
         </div>
       </div>
       <div class="zakaz_narayd-reason-line" id="notes-line-container">
         <div class="notes-text">
           <strong>Примітки:</strong>
-          <span id="${EDITABLE_NOTES_ID}" class="highlight editable ${editableClass}" ${editableAttr} style="white-space: pre-wrap;">${actDetails?.["Примітки"] || "—"
-    }</span>
+          <span id="${EDITABLE_NOTES_ID}" class="highlight editable ${editableClass}" ${editableAttr} style="white-space: pre-wrap;">${
+            actDetails?.["Примітки"] || "—"
+          }</span>
         </div>
       </div>
     </div>
@@ -1646,6 +1655,11 @@ function handleInputChange(event: Event): void {
   switch (dataName) {
     case "price":
     case "id_count": {
+      // Фіксуємо ручну ціну лише для реального вводу користувача (не для програмних setCellText)
+      if (dataName === "price" && event.isTrusted) {
+        target.setAttribute("data-price-manual", "1");
+      }
+
       const cleanedValue = target.textContent?.replace(/[^0-9]/g, "") || "";
       const formattedValue = formatNumberWithSpaces(cleanedValue, 0, 0);
       if (target.textContent !== formattedValue) {
@@ -2122,7 +2136,8 @@ export async function refreshActTableSilently(actId: number): Promise<void> {
           sum: item["Сума"] || 0,
           person_or_store: shopName,
           catalog: showCatalog ? item["Каталог"] || "" : "",
-          sclad_id: showCatalog ? item["sclad_id"] || null : null,
+          // ✅ ВИПРАВЛЕНО: завжди зберігаємо sclad_id (незалежно від showCatalog)
+          sclad_id: item["sclad_id"] || null,
           slyusar_id: null,
           recordId,
         };
@@ -2137,11 +2152,11 @@ export async function refreshActTableSilently(actId: number): Promise<void> {
           item["recordId"] ||
           (slyusarName
             ? getRecordIdFromHistory(
-              slyusarName,
-              workName,
-              act.act_id,
-              workIndex,
-            )
+                slyusarName,
+                workName,
+                act.act_id,
+                workIndex,
+              )
             : undefined);
 
         return {
@@ -2167,7 +2182,11 @@ export async function refreshActTableSilently(actId: number): Promise<void> {
     for (const d of actDetails?.["Деталі"] || []) {
       const id = Number(d?.sclad_id);
       const qty = Number(d?.["Кількість"] ?? 0);
-      if (id) globalCache.oldNumbers.set(id, qty);
+      if (id)
+        globalCache.oldNumbers.set(
+          id,
+          (globalCache.oldNumbers.get(id) || 0) + qty,
+        );
     }
 
     // 9. Знаходимо tbody таблиці

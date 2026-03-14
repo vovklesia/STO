@@ -698,7 +698,9 @@ function renderAutocompleteList(target: HTMLElement, suggestions: Suggest[]) {
         } else {
           // Case: Detail selected in Catalog (via sclad_id or just type)
           if (chosenScladId !== undefined) {
-            applyCatalogSelectionById(target, chosenScladId, chosenFullName);
+            applyCatalogSelectionById(target, chosenScladId, chosenFullName, {
+              forcePriceUpdate: true,
+            });
           }
           // Update # to ⚙️
           if (indexCell) {
@@ -793,7 +795,9 @@ function renderAutocompleteList(target: HTMLElement, suggestions: Suggest[]) {
           } else {
             // ✅ ВИПРАВЛЕНО: Якщо вибрано деталь зі складу - підтягуємо всі дані
             if (chosenScladId !== undefined) {
-              applyCatalogSelectionById(target, chosenScladId, fullText);
+              applyCatalogSelectionById(target, chosenScladId, fullText, {
+                forcePriceUpdate: true,
+              });
             }
             // НЕ очищаємо pib_magazin якщо вибрано деталь
           }
@@ -1536,7 +1540,10 @@ export function setupAutocompleteForEditableCells(
       e.preventDefault();
       const scladIdAttr = target.getAttribute("data-sclad-id");
       const sclad_id = scladIdAttr ? Number(scladIdAttr) : null;
-      if (sclad_id) applyCatalogSelectionById(target, sclad_id);
+      if (sclad_id)
+        applyCatalogSelectionById(target, sclad_id, undefined, {
+          forcePriceUpdate: true,
+        });
       closeAutocompleteList();
       removeCatalogInfo();
     }
@@ -1552,7 +1559,8 @@ export function setupAutocompleteForEditableCells(
     ) {
       setTimeout(() => {
         const pn = (target.textContent || "").trim();
-        const initial = (target as any)._initialPn || "";
+        const initialRaw = (target as any)._initialPn;
+        const initial = typeof initialRaw === "string" ? initialRaw : "";
         removeCatalogInfo();
 
         const row = target.closest("tr") as HTMLElement | null;
@@ -1563,12 +1571,26 @@ export function setupAutocompleteForEditableCells(
         const scladIdAttr = target.getAttribute("data-sclad-id");
         const sclad_id = scladIdAttr ? Number(scladIdAttr) : null;
 
+        // Якщо _initialPn не ініціалізовано (нестандартний blur), не робимо автопідстановок ціни.
+        if (initialRaw === undefined) {
+          if (row && LIVE_WARNINGS) {
+            updateCatalogWarningForRow(row);
+            updatePriceWarningForRow(row);
+          }
+          return;
+        }
+
         if (pn && pn !== initial) {
           if (sclad_id) {
-            applyCatalogSelectionById(target, sclad_id);
+            applyCatalogSelectionById(target, sclad_id, undefined, {
+              forcePriceUpdate: true,
+            });
           } else {
             const picked = findScladItemByPart(pn);
-            if (picked) applyCatalogSelectionById(target, picked.sclad_id);
+            if (picked)
+              applyCatalogSelectionById(target, picked.sclad_id, undefined, {
+                forcePriceUpdate: true,
+              });
           }
         } else {
           if (row && LIVE_WARNINGS) {
@@ -1712,6 +1734,7 @@ async function applyCatalogSelectionById(
   target: HTMLElement,
   sclad_id: number,
   fullName?: string,
+  options?: { forcePriceUpdate?: boolean },
 ) {
   const picked = globalCache.skladParts.find((p) => p.sclad_id === sclad_id);
   if (!picked) return;
@@ -1737,7 +1760,7 @@ async function applyCatalogSelectionById(
   const percentInfo = await loadPercentByWarehouse(scladNomer);
 
   const basePrice = Math.round(picked.price || 0);
-  const priceWithMarkup = Math.round(
+  const priceWithMarkup = Math.ceil(
     basePrice * (1 + percentInfo.percent / 100),
   );
 
@@ -1749,7 +1772,33 @@ async function applyCatalogSelectionById(
   if (nameCell) {
     nameCell.setAttribute("data-type", "details");
   }
-  setCellText(priceCell, formatUA(priceWithMarkup));
+
+  // 🔒 Не перезаписуємо ціну якщо обрана та сама деталь і ціна вже встановлена.
+  // Перезаписуємо тільки коли: ціна порожня/0, або користувач обрав ІНШУ деталь.
+  const currentPrice = parseNum(priceCell?.textContent);
+  const isManualPrice = priceCell?.getAttribute("data-price-manual") === "1";
+
+  // Перевіряємо чи це та сама деталь що вже була в рядку
+  const prevScladId = catalogCell?.getAttribute("data-sclad-id");
+  const isSameDetail =
+    prevScladId !== null &&
+    prevScladId !== undefined &&
+    Number(prevScladId) === sclad_id;
+
+  const shouldAutoFillPrice =
+    // Якщо деталь змінилась — завжди підставляємо нову ціну
+    (!!options?.forcePriceUpdate && !isSameDetail) ||
+    // Якщо деталь та сама — тільки коли ціна порожня/0 і не ручна
+    (!isManualPrice && (!currentPrice || currentPrice <= 0));
+
+  // При явному перевиборі ІНШОЇ деталі дозволяємо нову автопідстановку ціни
+  if (options?.forcePriceUpdate && !isSameDetail && priceCell) {
+    priceCell.removeAttribute("data-price-manual");
+  }
+
+  if (shouldAutoFillPrice) {
+    setCellText(priceCell, formatUA(priceWithMarkup));
+  }
 
   // ✅ СТИЛІЗАЦІЯ ЯЧЕЙКИ ЦІНИ ПО СТАТУСУ СКЛАДУ
   if (priceCell) {

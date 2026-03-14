@@ -1399,7 +1399,8 @@ class SchedulerApp {
         const { data: carsData } = await supabase
           .from("cars")
           .select("cars_id, data")
-          .in("cars_id", carIds);
+          .in("cars_id", carIds)
+          .not("is_deleted", "is", true);
         if (carsData) carsData.forEach((c) => carsMap.set(c.cars_id, c.data));
       }
 

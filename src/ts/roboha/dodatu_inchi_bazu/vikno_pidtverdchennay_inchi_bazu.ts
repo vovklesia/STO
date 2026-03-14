@@ -665,17 +665,15 @@ export function showSavePromptModal(): Promise<boolean> {
           results.push(ok);
 
           success = results.every(Boolean);
-          cleanup();
 
           if (success) {
+            cleanup();
             resetShopState();
             resetDetailState();
             await clearInputAndReloadData();
             document.dispatchEvent(new CustomEvent("other-base-data-updated"));
-          } else {
-            closeAllModals();
-            showNotification("Помилка при збереженні (faktura)", "error");
           }
+          // Якщо !success — модалка залишається відкритою, toast вже показано
           resolve(success);
           return;
         }

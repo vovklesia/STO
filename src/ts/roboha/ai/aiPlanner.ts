@@ -72,190 +72,51 @@ async function addTokensToDB(
   }
 }
 
-const SQL_SYSTEM_PROMPT = `Ти — SQL-генератор для PostgreSQL бази автосервісу (СТО).
-Твоя задача: отримати опис умови УКРАЇНСЬКОЮ і повернути ТІЛЬКИ SQL SELECT-запит.
+const SQL_SYSTEM_PROMPT = `SQL-генератор PostgreSQL для СТО. Поверни ТІЛЬКИ SELECT-запит.
 
-СТРУКТУРА БАЗИ:
-- acts: act_id, date_on (timestamp), date_off (timestamp|null=відкритий), client_id, cars_id,
-  created_at, updated_at,
-  data (JSONB): ПІБ, Клієнт, Телефон, Марка, Модель, "Держ. номер", VIN, Пробіг,
-  Приймальник, Слюсар, "Причина звернення", Рекомендації, Примітки,
-  Знижка, Аванс, "За деталі", "За роботу", "Загальна сума",
-  Роботи [{Робота, Кількість, Ціна, Зарплата}], Деталі [{Деталь, Кількість, Ціна, Сума}]
-- clients: client_id, created_at, data (JSONB): ПІБ, Телефон, Email, Примітки
-- cars: cars_id, client_id, created_at, data (JSONB): Авто, "Номер авто", Vincode, Рік, Марка, Модель
-- slyusars: slyusar_id, Name, data (JSONB): Name, "Ім'я", Доступ, Телефон, Посада, Пароль, Логін
-- sclad: sclad_id, created_at, data (JSONB): Назва, Каталог, Виробник, Ціна, Кількість, Група, Постачальник
-- atlas_reminders: reminder_id, title, description, reminder_type, condition_query, schedule, status,
-  next_trigger_at, trigger_count, created_by, recipients, channel, priority, meta, created_at
-- atlas_reminder_logs: id, reminder_id, recipient_id, channel, message_text, delivery_status, created_at
-- atlas_telegram_users: slyusar_id, telegram_chat_id, is_active
-- act_changes_notifications: id, act_id, title, message, is_read, created_at
-- settings: setting_id, Загальні (text), API (bool), token (number), date (timestamp)
+БД:
+acts: act_id,date_on(ts),date_off(ts|null=відкритий),client_id,cars_id,data{ПІБ,Телефон,Марка,Модель,"Держ. номер",VIN,Пробіг,Приймальник,Слюсар,"Причина звернення",Рекомендації,Знижка,Аванс,"За деталі","За роботу","Загальна сума",Роботи[{Робота,Кількість,Ціна,Зарплата}],Деталі[{Деталь,Кількість,Ціна,Сума}]}
+clients: client_id,data{ПІБ,Телефон,Email,Примітки}
+cars: cars_id,client_id,data{Авто,"Номер авто",Vincode,Рік,Марка,Модель}
+slyusars: slyusar_id,Name,data{Name,"Ім'я",Доступ,Телефон,Посада}
+sclad: sclad_id,name,part_number,price,kilkist_on,kilkist_off,quantity,shops,akt
+atlas_reminders: reminder_id,title,reminder_type,condition_query,schedule,status,next_trigger_at,created_by,recipients
+settings: setting_id,"Загальні"(text),API(bool),token(int)
 
 ПРАВИЛА:
-1. ТІЛЬКИ SELECT (без INSERT/UPDATE/DELETE)
-2. Відкритий акт: date_off IS NULL
-3. Старіший за N днів: date_on < NOW() - INTERVAL 'N days'
-4. JSONB доступ: data->>'ПІБ', data->>'Слюсар'
-5. Якщо потрібно слюсаря — з'єднуй acts.data->>'Слюсар' з slyusars."Name"
-6. Поверни корисні колонки: act_id, дані клієнта, авто, роботи
-7. Поверни ТІЛЬКИ SQL запит, без пояснень, без \`\`\`sql, без коментарів
-8. Один рядок або кілька — але тільки SQL
+1. ТІЛЬКИ SELECT 2. Відкритий: date_off IS NULL 3. Старіший N днів: date_on<NOW()-INTERVAL'N days'
+4. JSONB: data->>'ПІБ' 5. Слюсар→acts.data->>'Слюсар'=slyusars."Name"
+6. Тільки SQL, без пояснень/\`\`\`sql/коментарів
 
-ВАЖЛИВО — НАЗВИ СТОВПЦІВ:
-Завжди використовуй AS з УКРАЇНСЬКИМИ назвами для кожного стовпця!
-Приклади:
-  act_id AS "Акт №"
-  date_on AS "Дата відкриття"
-  date_off AS "Дата закриття"
-  data->>'ПІБ' AS "Клієнт"
-  data->>'Телефон' AS "Телефон"
-  data->>'Слюсар' AS "Слюсар"
-  data->>'Марка' AS "Марка"
-  data->>'Модель' AS "Модель"
-  data->>'Держ. номер' AS "Держ. номер"
-  data->>'VIN' AS "VIN"
-  data->>'Загальна сума' AS "Сума"
-  data->>'За роботу' AS "За роботу"
-  data->>'За деталі' AS "За деталі"
-  data->>'Знижка' AS "Знижка"
-  data->>'Приймальник' AS "Приймальник"
-  data->>'Причина звернення' AS "Причина звернення"
-  CASE WHEN date_off IS NULL THEN 'Відкритий' ELSE 'Закритий' END AS "Статус"
-Ніколи НЕ залишай стовпці без AS з українською назвою!`;
+AS з УКРАЇНСЬКИМИ назвами: act_id AS "Акт №", date_on AS "Дата відкриття", date_off AS "Дата закриття", data->>'ПІБ' AS "Клієнт", data->>'Телефон' AS "Телефон", data->>'Слюсар' AS "Слюсар", data->>'Загальна сума' AS "Сума", CASE WHEN date_off IS NULL THEN 'Відкритий' ELSE 'Закритий' END AS "Статус"
+Кожен стовпець — з AS українською!`;
 
 // Окремий промпт для генерації JSON-правил для режиму "Контроль" (Realtime)
-const REALTIME_RULE_PROMPT = `Ти — генератор правил моніторингу для автосервісу (СТО).
-Твоя задача: прочитати умову УКРАЇНСЬКОЮ і повернути JSON-правило спостереження за базою даних.
+const REALTIME_RULE_PROMPT = `Генератор правил моніторингу для СТО. Прочитай умову → поверни JSON.
 
-ТАБЛИЦІ (table) І ЇХ СТРУКТУРА:
+ТАБЛИЦІ: acts(акти), slyusars(персонал), clients(клієнти), cars(авто), sclad(склад)
 
-1. acts — акти (замовлення-наряди):
-   Стовпці: act_id, date_on (timestamp), date_off (timestamp|null), client_id, cars_id, 
-            created_at, updated_at
-   data (JSONB): ПІБ, Клієнт, Телефон, Марка, Модель, "Держ. номер", VIN, Пробіг,
-                 Приймальник, Слюсар, "Причина звернення", Рекомендації, Примітки,
-                 Знижка, Аванс, "За деталі", "За роботу", "Загальна сума",
-                 Роботи [{Найменування, Каталог, "К-ть", Ціна, Сума, "Зар-та", "ПІБ _ Магазин"}],
-                 Деталі [{Найменування, Каталог, "К-ть", Ціна, Сума, "ПІБ _ Магазин"}]
+CHECK-УМОВИ:
+Стовпці: "date_off CLOSED"(заповнили), "date_off OPENED"(очистили), "date_off CHANGED"(будь-яка зміна), "date_off IS NOT NULL"
+JSONB: "data.Пароль CHANGED", "data.Слюсар CHANGED", "data.\\"Загальна сума\\" CHANGED"(лапки для пробілів)
+Масиви: "data.Роботи CHANGED"(+/-робота), "data.Деталі CHANGED"(+/-деталь)
+Порожній ""=будь-яка зміна. EVENTS: INSERT/UPDATE/DELETE
 
-2. slyusars — слюсарі/персонал:
-   Стовпці: slyusar_id
-   data (JSONB): Name, "Ім'я", Доступ, Телефон, Посада, Пароль, Логін
-
-3. clients — клієнти:
-   Стовпці: client_id, created_at
-   data (JSONB): ПІБ, Телефон, Email, Примітки
-
-4. cars — автомобілі:
-   Стовпці: cars_id, client_id, created_at
-   data (JSONB): Авто, "Номер авто", Vincode, Рік, Марка, Модель
-
-5. sclad — склад деталей:
-   Стовпці: sclad_id, created_at
-   data (JSONB): Назва, Каталог, Виробник, Ціна, Кількість, Група, Постачальник
-
-ПОЛЯ ДЛЯ CHECK-УМОВ:
-
-Верхньорівневі поля (стовпці таблиці):
-- date_off CLOSED → поле змінилось з null на значення (акт закрили)
-- date_off OPENED → поле змінилось з значення на null (акт відкрили/повернули/очистили)
-- date_off CHANGED → будь-яка зміна поля (включаючи очищення і заповнення)
-- date_off IS NOT NULL / IS NULL → перевірка поточного стану
-
-ВАЖЛИВО: "CHANGED" спрацьовує на БУДЬ-ЯКУ зміну поля (значення→інше, значення→null, null→значення).
-"OPENED" = поле стало порожнім (очищення). "CLOSED" = поле заповнили.
-
-Вкладені поля (data JSONB) — через крапку:
-- data.Пароль CHANGED → зміна пароля
-- data.Слюсар CHANGED → зміна слюсаря
-- data."Загальна сума" CHANGED → зміна суми (лапки для полів з пробілом)
-
-Масиви в data (Роботи, Деталі):
-- data.Роботи CHANGED → додано/видалено/змінено роботу в акті
-- data.Деталі CHANGED → додано/видалено/змінено деталь в акті
-Система автоматично покаже ЩО саме додано/видалено (➕/➖ назви позицій з цінами).
-
-Порожній check ("") — спрацює на БУДЬ-ЯКУ зміну без фільтрації.
-
-ПОДІЇ (events):
-- "INSERT" — новий запис
-- "UPDATE" — зміна запису  
-- "DELETE" — видалення запису
-
-ФОРМАТ ВІДПОВІДІ (тільки JSON, без пояснень):
-{
-  "table": "назва_таблиці",
-  "events": ["INSERT", "UPDATE"],
-  "check": "умова_перевірки",
-  "show_fields": ["Поле1", "Поле2"]
-}
-
-show_fields (НЕОБОВ'ЯЗКОВЕ) — масив назв полів з data JSONB, які показати в повідомленні.
-Якщо вказано → повідомлення КОМПАКТНЕ, покаже ТІЛЬКИ ці поля.
-Якщо НЕ вказано → покаже все (клієнт, авто, суми, дати, зміни).
-Використовуй show_fields тільки коли користувач ЯВНО просить показати конкретні поля.
-НЕ додавай show_fields якщо користувач не уточнює що саме бачити.
+ФОРМАТ (тільки JSON):
+{"table":"назва","events":["INSERT","UPDATE"],"check":"умова","show_fields":["Поле1"]}
+show_fields — НЕобов'язкове, тільки якщо явно просять конкретні поля.
 
 ПРИКЛАДИ:
+"зміни в акті"→{"table":"acts","events":["UPDATE"],"check":""}
+"додали/видалили роботу"→{"table":"acts","events":["UPDATE"],"check":"data.Роботи CHANGED"}
+"акт закрився"→{"table":"acts","events":["UPDATE"],"check":"date_off CLOSED"}
+"акт відкрився"→{"table":"acts","events":["UPDATE"],"check":"date_off OPENED"}
+"новий акт"→{"table":"acts","events":["INSERT"],"check":""}
+"змінили пароль"→{"table":"slyusars","events":["UPDATE"],"check":"data.Пароль CHANGED"}
+"новий клієнт"→{"table":"clients","events":["INSERT"],"check":""}
+"закриття акту, покажи суму"→{"table":"acts","events":["UPDATE"],"check":"date_off CLOSED","show_fields":["Загальна сума","Приймальник"]}
 
-Умова: "при збереженні даних в акті повідомити що змінено" →
-{"table":"acts","events":["UPDATE"],"check":""}
-(порожній check = сповіщення при будь-якій зміні акту. Система авто-покаже: номер, ПІБ, авто, і деталі змін — які роботи/деталі додано/видалено, зміну суми тощо)
-
-Умова: "якщо додали або видалили роботу в акті" →
-{"table":"acts","events":["UPDATE"],"check":"data.Роботи CHANGED"}
-
-Умова: "якщо додали або видалили деталь в акті" →
-{"table":"acts","events":["UPDATE"],"check":"data.Деталі CHANGED"}
-
-Умова: "якщо акт закрився" →
-{"table":"acts","events":["UPDATE"],"check":"date_off CLOSED"}
-
-Умова: "якщо акт відкрився або відновлено" →
-{"table":"acts","events":["UPDATE"],"check":"date_off OPENED"}
-
-Умова: "якщо закрили або відкрили акт" →
-{"table":"acts","events":["UPDATE"],"check":"date_off CHANGED"}
-
-Умова: "якщо додано новий акт" →
-{"table":"acts","events":["INSERT"],"check":""}
-
-Умова: "якщо слюсар змінив пароль" →
-{"table":"slyusars","events":["UPDATE"],"check":"data.Пароль CHANGED"}
-
-Умова: "якщо змінили доступ слюсаря" →
-{"table":"slyusars","events":["UPDATE"],"check":"data.Доступ CHANGED"}
-
-Умова: "якщо змінили будь-що в персоналі" →
-{"table":"slyusars","events":["UPDATE"],"check":""}
-
-Умова: "якщо додано новий клієнт" →
-{"table":"clients","events":["INSERT"],"check":""}
-
-Умова: "якщо видалено деталь зі складу" →
-{"table":"sclad","events":["DELETE"],"check":""}
-
-Умова: "якщо змінилася загальна сума в акті" →
-{"table":"acts","events":["UPDATE"],"check":"data.\\"Загальна сума\\" CHANGED"}
-
-Умова: "будь-яка зміна в актах" →
-{"table":"acts","events":["INSERT","UPDATE","DELETE"],"check":""}
-
-Умова: "контроль цін на складі" →
-{"table":"sclad","events":["UPDATE"],"check":"data.Ціна CHANGED"}
-
-Умова: "коли акт закрився, покажи суму і хто прийняв" →
-{"table":"acts","events":["UPDATE"],"check":"date_off CLOSED","show_fields":["Загальна сума","Приймальник"]}
-
-Умова: "повідомити коли акт відкрився назад" →
-{"table":"acts","events":["UPDATE"],"check":"date_off OPENED"}
-
-Умова: "при зміні акту покажи тільки клієнта і авто" →
-{"table":"acts","events":["UPDATE"],"check":"","show_fields":["ПІБ","Авто","Марка"]}
-
-Повертай ТІЛЬКИ JSON без будь-яких пояснень!`;
+Повертай ТІЛЬКИ JSON!`;
 
 async function generateSQLFromDescription(
   description: string,
@@ -279,7 +140,7 @@ async function generateSQLFromDescription(
               { role: "system", content: SQL_SYSTEM_PROMPT },
               { role: "user", content: description },
             ],
-            max_tokens: 1024,
+            max_tokens: 512,
             temperature: 0.1,
           }),
         });
@@ -296,7 +157,7 @@ async function generateSQLFromDescription(
           body: JSON.stringify({
             system_instruction: { parts: [{ text: SQL_SYSTEM_PROMPT }] },
             contents: [{ role: "user", parts: [{ text: description }] }],
-            generationConfig: { temperature: 0.1, maxOutputTokens: 1024 },
+            generationConfig: { temperature: 0.1, maxOutputTokens: 512 },
           }),
         });
         if (!resp.ok) continue;
@@ -428,8 +289,81 @@ let telegramLinked: boolean | null = null; // null = не перевірено
 let telegramUsers: { slyusar_id: number; name: string }[] = [];
 let callbackLogs: Map<number, { message_text: string; sent_at: string }> =
   new Map();
+const plannerCountListeners = new Set<(count: number) => void>();
+
+function emitPlannerReminderCount(): void {
+  const count = reminders.length;
+  plannerCountListeners.forEach((listener) => {
+    try {
+      listener(count);
+    } catch {
+      /* silent */
+    }
+  });
+}
+
+export function subscribePlannerReminderCount(
+  listener: (count: number) => void,
+): () => void {
+  plannerCountListeners.add(listener);
+  listener(reminders.length);
+  return () => {
+    plannerCountListeners.delete(listener);
+  };
+}
+
+export async function refreshPlannerBadgeCount(): Promise<number> {
+  reminders = await loadReminders();
+  emitPlannerReminderCount();
+  return reminders.length;
+}
 
 // ── Утиліти ──
+
+function isRetryableSupabaseError(error: any): boolean {
+  const status = Number(error?.status || error?.code || 0);
+  if (status === 503 || status === 502 || status === 504 || status === 429) {
+    return true;
+  }
+  const msg = String(error?.message || "").toLowerCase();
+  return (
+    msg.includes("503") ||
+    msg.includes("service unavailable") ||
+    msg.includes("gateway timeout") ||
+    msg.includes("too many requests")
+  );
+}
+
+async function sleepMs(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function selectSlyusarsWithRetry(
+  columns: string,
+  apply?: (q: any) => any,
+): Promise<{ data: any[] | null; error: any }> {
+  const maxAttempts = 3;
+  let lastError: any = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    let query = supabase.from("slyusars").select(columns);
+    if (apply) query = apply(query);
+
+    const { data, error } = await query;
+    if (!error) {
+      return { data: (data || []) as any[], error: null };
+    }
+
+    lastError = error;
+    if (!isRetryableSupabaseError(error) || attempt === maxAttempts) {
+      break;
+    }
+
+    await sleepMs(250 * attempt);
+  }
+
+  return { data: null, error: lastError };
+}
 
 function getCurrentSlyusarId(): number | null {
   try {
@@ -487,10 +421,14 @@ async function loadTelegramUsers(): Promise<void> {
     }
 
     const ids = tgUsers.map((u: any) => u.slyusar_id);
-    const { data: slyusars } = await supabase
-      .from("slyusars")
-      .select("slyusar_id, data")
-      .in("slyusar_id", ids);
+    let slyusars: any[] | null = null;
+
+    {
+      const { data } = await selectSlyusarsWithRetry("slyusar_id, data", (q) =>
+        q.in("slyusar_id", ids),
+      );
+      slyusars = (data || []) as any[];
+    }
 
     telegramUsers = (slyusars || []).map((s: any) => ({
       slyusar_id: s.slyusar_id,
@@ -667,6 +605,7 @@ export async function createReminder(
     return false;
   }
 
+  await refreshPlannerBadgeCount();
   return true;
 }
 
@@ -704,6 +643,7 @@ export async function deleteReminder(id: number): Promise<boolean> {
     return false;
   }
 
+  await refreshPlannerBadgeCount();
   return true;
 }
 
@@ -1210,6 +1150,7 @@ function initPlannerHandlers(container: HTMLElement): void {
 
 async function refreshPlanner(container: HTMLElement): Promise<void> {
   reminders = await loadReminders();
+  emitPlannerReminderCount();
   await renderPlannerPanel(container);
 }
 
@@ -1926,17 +1867,62 @@ function initModalHandlers(
   // Видалити (тільки edit)
   overlay
     .querySelector("#planner-modal-delete")
-    ?.addEventListener("click", async () => {
-      if (editingReminderId && confirm("Видалити це нагадування?")) {
-        const ok = await deleteReminder(editingReminderId);
-        if (ok) {
-          showToast("Видалено", "success");
-          close();
-          await refreshPlanner(plannerContainer);
-        } else {
-          showToast("Помилка видалення", "error");
+    ?.addEventListener("click", () => {
+      if (!editingReminderId) return;
+      const reminderId = editingReminderId;
+
+      const deleteBtn = overlay.querySelector(
+        "#planner-modal-delete",
+      ) as HTMLElement;
+      if (!deleteBtn || deleteBtn.dataset.counting === "true") return;
+
+      deleteBtn.dataset.counting = "true";
+      const origText = deleteBtn.innerHTML;
+      let timeLeft = 5;
+      let cancelled = false;
+
+      deleteBtn.innerHTML = `<span class="ai-planner-delete-countdown">${timeLeft}</span>`;
+      deleteBtn.classList.add("ai-planner-btn--counting");
+
+      const interval = setInterval(() => {
+        timeLeft--;
+        const cd = deleteBtn.querySelector(".ai-planner-delete-countdown");
+        if (cd) cd.textContent = String(timeLeft);
+        if (timeLeft <= 0) {
+          clearInterval(interval);
+          if (!cancelled) {
+            (async () => {
+              const ok = await deleteReminder(reminderId);
+              if (ok) {
+                showToast("Видалено", "success");
+                close();
+                await refreshPlanner(plannerContainer);
+              } else {
+                showToast("Помилка видалення", "error");
+                deleteBtn.innerHTML = origText;
+                deleteBtn.dataset.counting = "";
+                deleteBtn.classList.remove("ai-planner-btn--counting");
+              }
+            })();
+          }
         }
-      }
+      }, 1000);
+
+      // Повторний клік по кнопці або по кружку — скасовує видалення
+      const cancelDelete = (evt: Event) => {
+        evt.stopPropagation();
+        cancelled = true;
+        clearInterval(interval);
+        deleteBtn.innerHTML = origText;
+        deleteBtn.dataset.counting = "";
+        deleteBtn.classList.remove("ai-planner-btn--counting");
+        deleteBtn.removeEventListener("click", cancelDelete);
+      };
+
+      deleteBtn.addEventListener("click", cancelDelete, { once: true });
+
+      const cd = deleteBtn.querySelector(".ai-planner-delete-countdown");
+      cd?.addEventListener("click", cancelDelete);
     });
 
   // Зберегти
@@ -2228,6 +2214,42 @@ function initModalHandlers(
 let plannerRealtimeChannel: ReturnType<typeof supabase.channel> | null = null;
 let currentPlannerContainer: HTMLElement | null = null;
 
+function ensurePlannerRealtimeSync(): void {
+  if (plannerRealtimeChannel) return;
+
+  plannerRealtimeChannel = supabase
+    .channel("custom-planner-channel")
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "atlas_reminder_logs" },
+      async (_payload) => {
+        if (
+          !currentPlannerContainer ||
+          !document.body.contains(currentPlannerContainer)
+        )
+          return;
+        const ids = reminders.map((r) => r.reminder_id);
+        await loadCallbackLogs(ids);
+        await renderPlannerPanel(currentPlannerContainer);
+      },
+    )
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "atlas_reminders" },
+      async (_payload) => {
+        reminders = await loadReminders();
+        emitPlannerReminderCount();
+        if (
+          !currentPlannerContainer ||
+          !document.body.contains(currentPlannerContainer)
+        )
+          return;
+        await renderPlannerPanel(currentPlannerContainer);
+      },
+    )
+    .subscribe();
+}
+
 export async function initPlannerTab(container: HTMLElement): Promise<void> {
   currentPlannerContainer = container;
 
@@ -2242,41 +2264,22 @@ export async function initPlannerTab(container: HTMLElement): Promise<void> {
   // Завантажити
   await loadTelegramUsers();
   reminders = await loadReminders();
+  emitPlannerReminderCount();
   await renderPlannerPanel(container);
   startCountdownTimer();
 
-  if (!plannerRealtimeChannel) {
-    plannerRealtimeChannel = supabase
-      .channel("custom-planner-channel")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "atlas_reminder_logs" },
-        async (_payload) => {
-          if (
-            !currentPlannerContainer ||
-            !document.body.contains(currentPlannerContainer)
-          )
-            return;
-          const ids = reminders.map((r) => r.reminder_id);
-          await loadCallbackLogs(ids);
-          await renderPlannerPanel(currentPlannerContainer);
-        },
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "atlas_reminders" },
-        async (_payload) => {
-          if (
-            !currentPlannerContainer ||
-            !document.body.contains(currentPlannerContainer)
-          )
-            return;
-          reminders = await loadReminders();
-          await renderPlannerPanel(currentPlannerContainer);
-        },
-      )
-      .subscribe();
-  }
+  ensurePlannerRealtimeSync();
+}
+
+/**
+ * Примусово оновити вкладку "Повідомлення", якщо вона відкрита в чаті.
+ * Використовується після function-calling create_reminder, коли модель може
+ * не повернути фінальний текст через 429/500, але нагадування вже збережено.
+ */
+export async function refreshPlannerTabIfMounted(): Promise<void> {
+  if (!currentPlannerContainer) return;
+  if (!document.body.contains(currentPlannerContainer)) return;
+  await refreshPlanner(currentPlannerContainer);
 }
 
 // ═══════════════════════════════════════
@@ -2288,48 +2291,53 @@ export function getReminderToolDeclaration() {
   return {
     name: "create_reminder",
     description:
-      "Створити нагадування або заплановану задачу для користувача СТО. " +
-      "Використовуй коли користувач каже 'нагадай', 'нагадуй', 'запиши нагадування', " +
-      "'запланувати', 'не забудь', 'через годину нагадай', 'в середу нагадай' тощо. " +
-      "Повертає створене нагадування з ID.",
+      'Створити нагадування/задачу/повідомлення тільки коли користувач ЯВНО просить це зробити: "нагадай", "заплануй", "не забудь", "створи нагадування", "відправ повідомлення", "надішли повідомлення". ' +
+      "НЕ викликай цей інструмент для звичайних питань, пошуку, звітів, списків актів або аналізу фото. " +
+      'ВАЖЛИВО: якщо вказано час ("о 21:30") → заповни trigger_at як ISO. ' +
+      'Якщо відносний час ("через годину","через 30 хвилин","через пів години") → заповни delay_hours/delay_minutes. ' +
+      'Якщо вказано кому ("браславчу","івану") → заповни recipient_name. ' +
+      'Якщо є фраза "відправ повідомлення"/"надішли повідомлення" → channel=telegram.',
     parameters: {
       type: "object",
       properties: {
         title: {
           type: "string",
-          description:
-            "Коротка назва нагадування. Наприклад: 'Розрахувати слюсарів', 'Перевірити відкриті акти'",
+          description: "Коротка назва нагадування",
         },
         description: {
           type: "string",
           description:
-            "Детальний опис (необов'язково). Додаткова інформація для нагадування.",
+            "Детальний опис (необов'язково). Текст повідомлення якщо вказано.",
         },
         reminder_type: {
           type: "string",
           enum: ["once", "recurring", "conditional"],
           description:
-            "Тип нагадування: " +
-            "'once' = одноразове (конкретна дата/час), " +
-            "'recurring' = повторюване (щодня/щотижня/щомісяця), " +
-            "'conditional' = умовне (перевіряє БД і спрацьовує якщо є результати)",
+            "once=одноразове, recurring=повторюване, conditional=умовне(SQL)",
         },
         trigger_at: {
           type: "string",
           description:
-            "ISO дата/час спрацювання для 'once'. Наприклад: '2026-03-05T09:00:00'. " +
-            "Якщо користувач каже 'в середу' — обчисли найближчу середу.",
+            'ISO дата/час для once. Приклади: "о 21:30" → сьогодні 21:30 ISO, "в середу" → найближча середа. Формат: YYYY-MM-DDTHH:mm:ss. НЕ використовуй для відносного часу (через X) — для цього використай delay_hours/delay_minutes.',
+        },
+        delay_hours: {
+          type: "number",
+          description:
+            'Відносний час в годинах від зараз. "через годину"/"через час" → 1, "через 2 години" → 2, "через пів години"/"півчаса" → 0.5',
+        },
+        delay_minutes: {
+          type: "number",
+          description:
+            'Відносний час в хвилинах від зараз. "через 30 хвилин" → 30, "через 15 хв" → 15, "через 5 хвилин" → 5. Може комбінуватися з delay_hours.',
         },
         schedule_type: {
           type: "string",
           enum: ["daily", "weekly", "monthly", "interval"],
-          description:
-            "Тип розкладу для 'recurring': daily/weekly/monthly/interval",
+          description: "Тип розкладу для recurring",
         },
         schedule_time: {
           type: "string",
-          description:
-            "Час спрацювання у форматі 'HH:MM'. За замовчуванням '09:00'.",
+          description: "Час HH:MM. За замовч '09:00'",
         },
         schedule_days: {
           type: "array",
@@ -2337,40 +2345,46 @@ export function getReminderToolDeclaration() {
             type: "string",
             enum: ["mon", "tue", "wed", "thu", "fri", "sat", "sun"],
           },
-          description:
-            "Дні тижня для 'weekly'. Наприклад: ['mon', 'wed', 'fri']",
+          description: "Дні тижня для weekly",
         },
         schedule_day: {
           type: "number",
-          description: "День місяця для 'monthly' (1-31).",
+          description: "День місяця для monthly (1-31)",
         },
         schedule_hours: {
           type: "number",
-          description: "Інтервал в годинах для 'interval'.",
+          description:
+            "Кількість годин для interval (наприклад 1 = кожну годину)",
+        },
+        schedule_minutes: {
+          type: "number",
+          description:
+            "Кількість хвилин для interval (наприклад 30 = кожні 30 хв). Використовується разом або замість schedule_hours",
         },
         recipients: {
           type: "string",
-          enum: ["self", "all", "mechanics"],
           description:
-            "Кому надіслати: 'self' = тільки мені, 'all' = всім, 'mechanics' = всім слюсарям. За замовчуванням 'self'.",
+            "self=тільки мені, all=всім, mechanics=слюсарам. За замовч 'self'. Якщо вказано конкретну людину → використай recipient_name замість цього поля.",
+        },
+        recipient_name: {
+          type: "string",
+          description:
+            'Ім\'я/прізвище конкретного одержувача. Приклад: "браславчу" → "Браславець", "івану" → "Іван". Система знайде користувача автоматично.',
         },
         channel: {
           type: "string",
           enum: ["app", "telegram", "both"],
           description:
-            "Канал доставки: 'app' = в додатку, 'telegram' = Telegram, 'both' = обидва. За замовчуванням 'app'.",
+            'Канал доставки. "відправ повідомлення"/"надішли" → telegram. "нагадай" → app. За замовч: якщо є recipient_name → telegram, інакше app.',
         },
         priority: {
           type: "string",
           enum: ["low", "normal", "high", "urgent"],
-          description:
-            "Пріоритет: low/normal/high/urgent. За замовчуванням 'normal'.",
+          description: "За замовч 'normal'",
         },
         condition_query: {
           type: "string",
-          description:
-            "SQL SELECT-запит для 'conditional'. Якщо повертає рядки — нагадування спрацьовує. " +
-            "Приклад: SELECT act_id, data->>'ПІБ' AS client, data->>'Слюсар' AS slusar FROM acts WHERE date_off IS NULL AND date_on < NOW() - INTERVAL '21 days'",
+          description: "SQL SELECT для conditional. Спрацьовує якщо є рядки.",
         },
       },
       required: ["title", "reminder_type"],
@@ -2378,27 +2392,255 @@ export function getReminderToolDeclaration() {
   };
 }
 
+/**
+ * Додає локальний часовий пояс до ISO-рядка, якщо його немає.
+ * AI генерує '2026-03-09T09:00:00' (без TZ) — Supabase трактує як UTC.
+ * Додаємо зсув браузера, щоб час зберігався правильно.
+ */
+function ensureTimezone(isoString: string): string {
+  // Вже має часовий пояс (Z, +03:00, -05:00 тощо)
+  if (/[Zz]$/.test(isoString) || /[+-]\d{2}:\d{2}$/.test(isoString)) {
+    return isoString;
+  }
+  // Додаємо локальний зсув
+  const offset = new Date().getTimezoneOffset(); // хвилин від UTC (від'ємне = схід)
+  const sign = offset <= 0 ? "+" : "-";
+  const absH = String(Math.floor(Math.abs(offset) / 60)).padStart(2, "0");
+  const absM = String(Math.abs(offset) % 60).padStart(2, "0");
+  return `${isoString}${sign}${absH}:${absM}`;
+}
+
+/**
+ * Fallback: витягнути абсолютний час із тексту ("на 17:00", "о 21:30", "в 9:00").
+ * Повертає рядок "HH:MM" або null.
+ */
+function extractAbsoluteTimeFromText(text: string): string | null {
+  const t = (text || "").toLowerCase();
+  // "на 17:00", "о 21:30", "в 9:00", "до 14:00"
+  const m = t.match(/(?:на|о|об|в|до)\s+(\d{1,2})[:\s](\d{2})\b/);
+  if (m) {
+    const h = Number(m[1]);
+    const min = Number(m[2]);
+    if (h >= 0 && h <= 23 && min >= 0 && min <= 59) {
+      return `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
+    }
+  }
+  return null;
+}
+
+/**
+ * Fallback: витягти відносний час з натуральної фрази, якщо модель не передала delay_*.
+ * Підтримує також часті помилки розпізнавання типу "півногиди".
+ */
+function extractRelativeDelayFromText(text: string): {
+  delayHours?: number;
+  delayMinutes?: number;
+} {
+  const t = (text || "").toLowerCase();
+  if (!t) return {};
+
+  // "через пів години" / "через півгодини" / помилки типу "півногиди"
+  if (/через\s+пів[\w'’\-\s]*год/i.test(t) || /через\s+півногид/i.test(t)) {
+    return { delayMinutes: 30 };
+  }
+
+  // "через 30 хв", "через 15 хвилин"
+  const minMatch = t.match(/через\s+(\d{1,3})\s*(хв|хвилин|хвилини|хвилину)/i);
+  if (minMatch) {
+    return { delayMinutes: Number(minMatch[1]) || 0 };
+  }
+
+  // "через 1 год", "через 2 години", "через годину"
+  const hrNumMatch = t.match(
+    /через\s+(\d{1,3})\s*(год|години|годину|г|hours?)/i,
+  );
+  if (hrNumMatch) {
+    return { delayHours: Number(hrNumMatch[1]) || 0 };
+  }
+  if (/через\s+годин[ауи]?/i.test(t) || /через\s+год\b/i.test(t)) {
+    return { delayHours: 1 };
+  }
+
+  return {};
+}
+
+/**
+ * Fallback: витягти ймовірного одержувача з фрази, якщо модель не передала recipient_name.
+ */
+function extractRecipientNameFromText(text: string): string | null {
+  const src = (text || "").trim();
+  if (!src) return null;
+
+  // Приклади: "Заплануй Шелест О. Г повідомлення ...", "надішли Бондару повідомлення ..."
+  const m = src.match(
+    /(?:заплануй|запланувати|нагадай|створи\s+нагадування|надішли(?:\s+.+?)?\s+повідомлення|відправ(?:ити)?(?:\s+.+?)?\s+повідомлення)\s+(.+?)(?:\s+повідомлення|\s+нагадування|\s+через\b|\s+о\s+\d|\s+на\s+\d|$)/i,
+  );
+  if (!m) return null;
+
+  const candidate = m[1]
+    .replace(/[,:;]+$/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
+  if (!candidate || candidate.length < 2) return null;
+  return candidate;
+}
+
+function hasExplicitReminderIntent(text: string): boolean {
+  const src = (text || "").trim().toLowerCase();
+  if (!src) return false;
+
+  return /(?:нагадай|нагадування|не забудь|заплануй|запланувати|створи нагадування|постав нагадування|відправ повідомлення|відправити повідомлення|надішли повідомлення|повідом мені|повідом мене|сповісти)/i.test(
+    src,
+  );
+}
+
 /** Виконує створення нагадування через Function Calling */
 export async function executeCreateReminder(
   args: Record<string, any>,
 ): Promise<string> {
   try {
+    const sourceText = [
+      args.__source_user_message,
+      args.user_message,
+      args.original_query,
+      args.query,
+      args.prompt,
+    ]
+      .filter((v) => typeof v === "string" && v.trim())
+      .join(" ")
+      .trim();
+
+    // Fallback-джерело природного тексту, якщо модель повернула неповні аргументи.
+    const rawText = [sourceText, args.title, args.description]
+      .filter((v) => typeof v === "string" && v.trim())
+      .join(" ")
+      .trim();
+
+    if (!hasExplicitReminderIntent(sourceText)) {
+      return JSON.stringify({
+        success: false,
+        error:
+          "create_reminder скасовано: у запиті немає явного прохання створити нагадування або повідомлення.",
+      });
+    }
+
+    if (!args.title || typeof args.title !== "string" || !args.title.trim()) {
+      return JSON.stringify({
+        success: false,
+        error:
+          "create_reminder скасовано: модель не передала назву нагадування.",
+      });
+    }
+
+    // Якщо recipient_name не прийшов — пробуємо витягнути з тексту
+    if (!args.recipient_name && rawText) {
+      const fallbackRecipient = extractRecipientNameFromText(rawText);
+      if (fallbackRecipient) {
+        args.recipient_name = fallbackRecipient;
+      }
+    }
+
+    // Якщо delay_* не прийшли — пробуємо витягнути "через ..." з тексту
+    if (
+      args.trigger_at == null &&
+      args.delay_hours == null &&
+      args.delay_minutes == null &&
+      rawText
+    ) {
+      const delay = extractRelativeDelayFromText(rawText);
+      if (typeof delay.delayHours === "number")
+        args.delay_hours = delay.delayHours;
+      if (typeof delay.delayMinutes === "number")
+        args.delay_minutes = delay.delayMinutes;
+    }
+
+    // Якщо trigger_at і delay досі порожні — пробуємо витягнути абсолютний час "на 17:00" / "о 21:30"
+    if (
+      args.trigger_at == null &&
+      args.delay_hours == null &&
+      args.delay_minutes == null &&
+      rawText
+    ) {
+      const absTime = extractAbsoluteTimeFromText(rawText);
+      if (absTime) {
+        args.trigger_at = absTime;
+      }
+    }
+
+    // Визначити канал: якщо є recipient_name і канал не вказано → telegram
+    const channel = args.channel || (args.recipient_name ? "telegram" : "app");
+
     const reminder: Partial<Reminder> = {
       title: args.title,
       description: args.description || null,
       reminder_type: args.reminder_type || "once",
       priority: (args.priority || "normal") as any,
-      channel: (args.channel || "app") as any,
+      channel: channel as any,
       recipients: (args.recipients || "self") as any,
     };
 
-    // Одноразове
-    if (args.reminder_type === "once" && args.trigger_at) {
-      reminder.trigger_at = args.trigger_at;
+    // Якщо вказано конкретного одержувача по імені — знайти його в БД
+    if (args.recipient_name) {
+      const recipientIds = await lookupRecipientByName(args.recipient_name);
+      if (recipientIds.length > 0) {
+        reminder.recipients = recipientIds as any;
+      }
+    }
+
+    // Одноразове (використовуємо resolved тип, бо AI може не передати reminder_type)
+    const resolvedType = args.reminder_type || "once";
+    if (resolvedType === "once") {
+      let triggerAt = args.trigger_at;
+
+      // Якщо є delay_days ("завтра"/"після завтра") — обчислити trigger_at
+      if (args.delay_days != null && args.delay_days > 0) {
+        const target = new Date();
+        target.setDate(target.getDate() + args.delay_days);
+        // Якщо є trigger_time ("о 9:40") — встановити годину/хвилину
+        if (args.trigger_time) {
+          const [h, m] = args.trigger_time.split(":").map(Number);
+          target.setHours(h || 0, m || 0, 0, 0);
+        } else {
+          target.setHours(9, 0, 0, 0); // за замовчуванням 09:00
+        }
+        triggerAt = target.toISOString();
+      }
+
+      // Якщо є delay_hours або delay_minutes — обчислити trigger_at від поточного часу
+      if (
+        !triggerAt &&
+        (args.delay_hours != null || args.delay_minutes != null)
+      ) {
+        const delayMs =
+          ((args.delay_hours || 0) * 60 + (args.delay_minutes || 0)) *
+          60 *
+          1000;
+        if (delayMs > 0) {
+          triggerAt = new Date(Date.now() + delayMs).toISOString();
+        }
+      }
+
+      // Якщо AI передав тільки час (HH:MM або HH:MM:SS) — прив'язати до сьогоднішньої дати
+      if (triggerAt && /^\d{1,2}:\d{2}(:\d{2})?$/.test(triggerAt.trim())) {
+        const now = new Date();
+        const [h, m] = triggerAt.trim().split(":").map(Number);
+        now.setHours(h, m, 0, 0);
+        // Якщо час вже минув сьогодні — ставимо на завтра
+        if (now.getTime() <= Date.now()) {
+          now.setDate(now.getDate() + 1);
+        }
+        triggerAt = now.toISOString();
+      }
+
+      if (triggerAt) {
+        // AI генерує час без часового поясу — додаємо локальний зсув
+        reminder.trigger_at = ensureTimezone(triggerAt);
+      }
     }
 
     // Повторюване
-    if (args.reminder_type === "recurring") {
+    if (resolvedType === "recurring") {
       const schedule: any = {
         type: args.schedule_type || "daily",
       };
@@ -2411,14 +2653,19 @@ export async function executeCreateReminder(
       if (args.schedule_type === "monthly" && args.schedule_day) {
         schedule.day = args.schedule_day;
       }
-      if (args.schedule_type === "interval" && args.schedule_hours) {
-        schedule.hours = args.schedule_hours;
+      if (args.schedule_type === "interval") {
+        schedule.hours = args.schedule_hours || 0;
+        schedule.minutes = args.schedule_minutes || 0;
+        // Якщо обидва 0 — мінімум 1 година
+        if (schedule.hours === 0 && schedule.minutes === 0) {
+          schedule.hours = 1;
+        }
       }
       reminder.schedule = schedule;
     }
 
     // Умовне
-    if (args.reminder_type === "conditional" && args.condition_query) {
+    if (resolvedType === "conditional" && args.condition_query) {
       reminder.condition_query = args.condition_query;
     }
 
@@ -2429,10 +2676,10 @@ export async function executeCreateReminder(
         success: true,
         message: `✅ Нагадування "${args.title}" створено!`,
         reminder_type: args.reminder_type,
-        trigger_at: args.trigger_at || null,
+        trigger_at: reminder.trigger_at || null,
         schedule: reminder.schedule || null,
-        recipients: args.recipients || "self",
-        channel: args.channel || "app",
+        recipients: args.recipient_name || args.recipients || "self",
+        channel: channel,
         priority: args.priority || "normal",
       });
     } else {
@@ -2446,5 +2693,73 @@ export async function executeCreateReminder(
       success: false,
       error: `Помилка: ${err.message}`,
     });
+  }
+}
+
+/**
+ * Нормалізація ПІБ для нечіткого порівняння (включно з відмінками: "Шелесту" -> "шелест").
+ */
+function normalizeNameForMatch(value: string): string {
+  const src = String(value || "")
+    .toLowerCase()
+    .replace(/[`'’".,:;!?()\[\]{}]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!src) return "";
+
+  const words = src
+    .split(" ")
+    .filter(Boolean)
+    .map((w) => {
+      // Відкидаємо короткі ініціали типу "о", "г", "о."
+      if (w.length <= 1) return "";
+      // Грубе стемінг-послаблення для укр. відмінків прізвищ/імен
+      return w.replace(
+        /(ами|ями|ові|еві|ому|ему|ого|ути|угу|яти|ять|йти|йтеся|ьми|ник|ек|льськ|ський|ецьк|ська|ський|ньк|нках|ною|ньый|ньй|ного|ному|ніх|них|ного|ного|ному|ною|них|ник|ніч|енн|йни|яни|ани|ин|хм|мім|мою|мої|му|мом|ме|мом|мі|моїм|міст|міст|мім|мій|мою|мої|мім|мій|ця|ець|цю|ці|ці|цею|цями|ахів|ав|ив|ев|ов|ув|ям|ам|ем|ім|ом|ум|аль|льн|ьн|иль|иньк|ічешк|не|ня|ни|ным|иче|яче|юче|уче|раш|ращ|ращ|ати|ить|ять|яти|нии|ни|буте|бунут|рало|бло|чь|рь|ть|ь|жу|жа|жи|жы|чь|шь|щь|хь|ў|ў|"а|я|у|ю|і|и|е|o|y|ь|ій|ій|ій|ий|ій|ий|ой|ый|ій|ий|й)$/u,
+        "",
+      );
+    })
+    .filter(Boolean);
+
+  return words.join(" ").trim();
+}
+
+/** Знаходить користувача за ім'ям/прізвищем у таблиці slyusars */
+async function lookupRecipientByName(name: string): Promise<number[]> {
+  try {
+    const searchName = name.trim();
+    if (!searchName) return [];
+
+    let data: any[] | null = null;
+    {
+      const q = await selectSlyusarsWithRetry("slyusar_id, data");
+      if (q.error || !q.data) return [];
+      data = q.data as any[];
+    }
+
+    if (!data || data.length === 0) return [];
+
+    const searchNorm = normalizeNameForMatch(searchName);
+    if (!searchNorm) return [];
+    const searchWords = searchNorm.split(" ").filter(Boolean);
+
+    const matched = data.filter((row: any) => {
+      const rawName = typeof row?.data?.Name === "string" ? row.data.Name : "";
+      const rowNorm = normalizeNameForMatch(rawName);
+      if (!rowNorm) return false;
+
+      // Спочатку спробуємо exakten матч (всі слова)
+      if (searchWords.every((sw) => rowNorm.includes(sw))) return true;
+
+      // Якщо exakten не пройшов — спробуємо частковий матч (хоча б одне слово)
+      return searchWords.some(
+        (sw) => rowNorm.startsWith(sw) || rowNorm.includes(" " + sw),
+      );
+    });
+
+    return matched.map((s: { slyusar_id: number }) => s.slyusar_id);
+  } catch {
+    return [];
   }
 }

@@ -68,7 +68,7 @@
 /* ====== Контент: ліва навігація + права частина ====== */
 .modal-content-all_other_bases {
   display: grid;
-  grid-template-columns: 140px 1fr;
+  grid-template-columns: 220px 1fr;
   gap: 30px;
   flex: 1;
   padding: 20px 20px;
@@ -82,23 +82,120 @@
 }
 
 .toggle-button-all_other_bases {
-  padding: 10px 20px;
-  border: 0;
-  border-radius: 999px;
-  font-weight: bold;
-  background: #14b8c4;
-  color: #fff;
-  text-align: center;
+  padding: 11px 22px;
+  border: 1px solid rgba(33, 40, 48, 0.1);
+  border-radius: 14px;
+  font-weight: 700;
+  font-size: 1.05rem;
+  line-height: 1;
+  color: #2f3a45;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  white-space: nowrap;
   cursor: pointer;
-  transition: filter 0.15s ease;
+  position: relative;
+  letter-spacing: 0.1px;
+  background: var(--btn-light, #e6edf4);
+  transition:
+    transform 0.18s ease,
+    background-color 0.18s ease,
+    color 0.18s ease,
+    box-shadow 0.18s ease,
+    filter 0.18s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 
-  &:hover {
-    filter: brightness(1.05);
+  // Емоджі через ::before
+  &::before {
+    margin-right: 0;
+    font-size: 1em;
+    flex: 0 0 auto;
   }
 
+  // 1 — Склад 📦
+  &:nth-child(1) {
+    --btn-light: #e5eef8;
+    --btn-hover: #d4e3f4;
+    --btn-active: #3f6ea5;
+    --btn-active-shadow: rgba(63, 110, 165, 0.42);
+    &::before {
+      content: "📦";
+    }
+  }
+  // 2 — Робота 🔧
+  &:nth-child(2) {
+    --btn-light: #e6f0fa;
+    --btn-hover: #d5e5f6;
+    --btn-active: #2f6ca3;
+    --btn-active-shadow: rgba(47, 108, 163, 0.42);
+    &::before {
+      content: "🔧";
+    }
+  }
+  // 3 — Співробітники 👥
+  &:nth-child(3) {
+    --btn-light: #e2f3f0;
+    --btn-hover: #d0ebe6;
+    --btn-active: #2f8072;
+    --btn-active-shadow: rgba(47, 128, 114, 0.4);
+    &::before {
+      content: "👥";
+    }
+  }
+  // 4 — Контрагент 🤝
+  &:nth-child(4) {
+    --btn-light: #eaf3df;
+    --btn-hover: #dcebc9;
+    --btn-active: #5d8d34;
+    --btn-active-shadow: rgba(93, 141, 52, 0.42);
+    &::before {
+      content: "🤝";
+    }
+  }
+  // 5 — Джерело 🌐
+  &:nth-child(5) {
+    --btn-light: #f8efd9;
+    --btn-hover: #f1e2bd;
+    --btn-active: #a67b2d;
+    --btn-active-shadow: rgba(166, 123, 45, 0.42);
+    &::before {
+      content: "🌐";
+    }
+  }
+
+  &:not(.active-all_other_bases):hover {
+    background: var(--btn-hover, #d8e4ef);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.14);
+    filter: none;
+  }
+
+  &:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+  }
+
+  // Активна кнопка
   &.active-all_other_bases {
-    background: #35c65b;
-    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.18);
+    background: var(--btn-active, #2f6ca3);
+    color: #ffffff;
+    border-color: transparent;
+    transform: scale(1.03);
+    box-shadow:
+      0 0 0 2px rgba(255, 255, 255, 0.7),
+      0 8px 18px var(--btn-active-shadow, rgba(47, 108, 163, 0.4));
+    filter: none;
+
+    &::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: 14px;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      pointer-events: none;
+    }
   }
 }
 
@@ -210,8 +307,8 @@
   overflow: auto;
   z-index: 10000;
   padding: 6px 0;
-  background: #e6f9ff;
-  border: 1px solid #a6dff0;
+  background: #ffffff;
+  border: 1px solid #cfd7e2;
   border-radius: 10px;
   box-shadow: 0 10px 22px rgba(0, 0, 0, 0.18);
 
@@ -221,12 +318,23 @@
 
   .custom-dropdown-item {
     padding: 10px 14px;
+    color: #2b3440;
+    background: #ffffff;
     cursor: pointer;
-    transition: background 0.12s ease;
+    transition:
+      background 0.12s ease,
+      color 0.12s ease;
     font-family: "Segoe UI", sans-serif;
 
     &:hover {
       background: #d2f0ff;
+      color: #123a7a;
+    }
+
+    &.selected {
+      background: #bfe7ff;
+      color: #1f2937;
+      font-weight: 600;
     }
   }
 }
@@ -385,31 +493,91 @@
   text-align: left;
 }
 
-// ✅ СТИЛІ ДЛЯ КНОПКИ ЗАПИСУ АКТУ
-.contragent-act-record-button {
-  //flex: 0 0 150px;           // Фіксована ширина 200px
-  //width: 200px;
-  padding: 8px 12px; // Зменшена висота
-  background: linear-gradient(135deg, #ffd54f, #ff6f00);
-  color: white;
-  border: none;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: bold;
-  cursor: pointer;
-  transition: all 0.3s;
-  box-shadow: 0 2px 8px rgba(255, 111, 0, 0.3);
-  //height: 34px;              // Зменшена висота
-  white-space: nowrap;
+// ✅ СТИЛІ ПЕРЕМИКАЧА Отримувач / Платник
+.recipient-toggle-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  align-self: flex-end;
+  padding-bottom: 2px;
+  flex-wrap: wrap;
+}
 
-  &:hover {
-    background: linear-gradient(135deg, #ff6f00, #d84315);
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(216, 67, 21, 0.5);
+.contragent-namber-input {
+  width: 80px;
+  padding: 5px 8px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 13px;
+  text-align: center;
+  transition: border-color 0.25s;
+
+  &:focus {
+    border-color: #e53935;
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(229, 57, 53, 0.15);
   }
 
-  &:active {
-    transform: translateY(0);
+  /* Прибирає стрілки у number input */
+  &::-webkit-inner-spin-button,
+  &::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  -moz-appearance: textfield;
+}
+
+.recipient-toggle-label {
+  font-size: 12px;
+  font-weight: 600;
+  transition:
+    color 0.3s,
+    opacity 0.3s;
+  opacity: 0.45;
+  user-select: none;
+  white-space: nowrap;
+
+  &.active {
+    opacity: 1;
+  }
+
+  &--left.active {
+    color: #e53935;
+  }
+
+  &--right.active {
+    color: #2e7d32;
+  }
+}
+
+.recipient-switch {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  background: #ef5350;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.3s;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2);
+
+  &.active {
+    background: #43a047;
+  }
+
+  &__knob {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 20px;
+    height: 20px;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  }
+
+  &.active &__knob {
+    transform: translateX(20px);
   }
 }
 

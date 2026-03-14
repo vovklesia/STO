@@ -35,6 +35,55 @@ let remindersStateChannel: ReturnType<typeof supabase.channel> | null = null;
 let stateSyncDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 let lastSyncTime = 0; // Час останньої синхронізації (тротлінг 10с)
 
+function isRetryableSupabaseError(error: any): boolean {
+  const status = Number(error?.status || error?.code || 0);
+  if (status === 503 || status === 502 || status === 504 || status === 429) {
+    return true;
+  }
+  const msg = String(error?.message || "").toLowerCase();
+  return (
+    msg.includes("503") ||
+    msg.includes("service unavailable") ||
+    msg.includes("gateway timeout") ||
+    msg.includes("too many requests")
+  );
+}
+
+async function sleepMs(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function selectSlyusarsWithRetry(
+  columns: string,
+  apply?: (q: any) => any,
+): Promise<{ data: any[] | null; error: any }> {
+  const maxAttempts = 3;
+  let lastError: any = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    let query = supabase.from("slyusars").select(columns);
+    if (apply) query = apply(query);
+
+    const { data, error } = await query;
+    if (!error) {
+      return { data: (data || []) as any[], error: null };
+    }
+
+    lastError = error;
+    if (!isRetryableSupabaseError(error) || attempt === maxAttempts) {
+      break;
+    }
+
+    await sleepMs(250 * attempt);
+  }
+
+  return { data: null, error: lastError };
+}
+
+// Дедуплікація: Map<reminder_id, timestamp> — коли нагадування було оброблено клієнтом
+const recentlyProcessed = new Map<number, number>();
+const DEDUP_WINDOW_MS = 30_000; // 30 сек — не обробляти одне нагадування частіше
+
 async function syncReminderCapabilities() {
   if (!currentSlyusarId) return;
 
@@ -300,15 +349,14 @@ async function resolveRecipientIds(reminder: DueReminder): Promise<number[]> {
   }
 
   if (recipients === "all" || recipients === '"all"') {
-    const { data } = await supabase.from("slyusars").select("slyusar_id");
+    const { data } = await selectSlyusarsWithRetry("slyusar_id");
     return data?.map((s: { slyusar_id: number }) => s.slyusar_id) || [];
   }
 
   if (recipients === "mechanics" || recipients === '"mechanics"') {
-    const { data } = await supabase
-      .from("slyusars")
-      .select("slyusar_id, data")
-      .filter("data->>Посада", "eq", "Слюсар");
+    const { data } = await selectSlyusarsWithRetry("slyusar_id, data", (q) =>
+      q.filter("data->>Посада", "eq", "Слюсар"),
+    );
     return data?.map((s: { slyusar_id: number }) => s.slyusar_id) || [];
   }
 
@@ -316,8 +364,12 @@ async function resolveRecipientIds(reminder: DueReminder): Promise<number[]> {
 
   if (typeof recipients === "string") {
     try {
-      const parsed = JSON.parse(recipients);
-      if (Array.isArray(parsed)) return parsed;
+      const raw = recipients.trim();
+      // Парсимо лише JSON-масив, щоб не ловити помилки на plain-значеннях типу "self"
+      if (raw.startsWith("[") && raw.endsWith("]")) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      }
     } catch {
       /* */
     }
@@ -353,6 +405,12 @@ async function checkDueReminders(): Promise<void> {
   if (isChecking || !hasActiveReminders) return;
   isChecking = true;
 
+  // Очистити застарілі записи дедуплікації
+  const now = Date.now();
+  for (const [rid, ts] of recentlyProcessed) {
+    if (now - ts > DEDUP_WINDOW_MS) recentlyProcessed.delete(rid);
+  }
+
   try {
     // Перевірити, що користувач все ще авторизований
     if (!currentSlyusarId) {
@@ -381,6 +439,12 @@ async function checkDueReminders(): Promise<void> {
       const isForMe = isReminderForUser(reminder, currentSlyusarId);
       if (!isForMe) continue;
 
+      // Дедуплікація: пропустити якщо вже оброблено нещодавно
+      const lastProcessed = recentlyProcessed.get(reminder.reminder_id);
+      if (lastProcessed && Date.now() - lastProcessed < DEDUP_WINDOW_MS) {
+        continue;
+      }
+
       // Для conditional-нагадувань — перевірити умову
       if (
         reminder.reminder_type === "conditional" &&
@@ -390,6 +454,28 @@ async function checkDueReminders(): Promise<void> {
         if (!condResult) {
           // Умова не виконана → просто оновити next_trigger_at
           await markTriggered(reminder.reminder_id, false, "Умова не виконана");
+          // Для interval — перерахувати next_trigger_at
+          try {
+            const sched =
+              typeof reminder.schedule === "string"
+                ? JSON.parse(reminder.schedule)
+                : reminder.schedule;
+            if (sched?.type === "interval") {
+              const hours = sched.hours || 0;
+              const minutes = sched.minutes || 0;
+              const totalMs =
+                (hours * 60 + minutes) * 60 * 1000 || 60 * 60 * 1000;
+              await supabase
+                .from("atlas_reminders")
+                .update({
+                  next_trigger_at: new Date(Date.now() + totalMs).toISOString(),
+                })
+                .eq("reminder_id", reminder.reminder_id);
+            }
+          } catch {
+            /* */
+          }
+          recentlyProcessed.set(reminder.reminder_id, Date.now());
           continue;
         }
 
@@ -464,6 +550,29 @@ async function checkDueReminders(): Promise<void> {
 
       // Записати лог + оновити trigger
       await markTriggered(reminder.reminder_id, true);
+
+      // Для interval — явно перерахувати next_trigger_at (RPC може не знати про minutes)
+      try {
+        const sched =
+          typeof reminder.schedule === "string"
+            ? JSON.parse(reminder.schedule)
+            : reminder.schedule;
+        if (sched?.type === "interval") {
+          const hours = sched.hours || 0;
+          const minutes = sched.minutes || 0;
+          const totalMs = (hours * 60 + minutes) * 60 * 1000 || 60 * 60 * 1000;
+          const nextTrigger = new Date(Date.now() + totalMs).toISOString();
+          await supabase
+            .from("atlas_reminders")
+            .update({ next_trigger_at: nextTrigger })
+            .eq("reminder_id", reminder.reminder_id);
+        }
+      } catch {
+        /* */
+      }
+
+      // Зафіксувати обробку для дедуплікації
+      recentlyProcessed.set(reminder.reminder_id, Date.now());
 
       anyTriggered = true;
     }
@@ -559,8 +668,12 @@ function isReminderForUser(reminder: DueReminder, slyusarId: number): boolean {
   // JSON-рядок масиву
   if (typeof recipients === "string") {
     try {
-      const parsed = JSON.parse(recipients);
-      if (Array.isArray(parsed)) return parsed.includes(slyusarId);
+      const raw = recipients.trim();
+      // Парсимо лише JSON-масив, щоб не логувати зайві parse errors на plain-строках
+      if (raw.startsWith("[") && raw.endsWith("]")) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed.includes(slyusarId);
+      }
     } catch {
       /* */
     }

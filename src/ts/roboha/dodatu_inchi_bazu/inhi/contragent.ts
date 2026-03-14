@@ -10,6 +10,7 @@ export interface ContragentRecord {
   oderjyvach: string;
   prumitka: string;
   data: string | null;
+  namber: number | null;
 }
 
 export let contragentData: ContragentRecord[] = [];
@@ -103,7 +104,7 @@ export async function loadContragentData(): Promise<ContragentRecord[]> {
   try {
     const { data, error } = await supabase
       .from("faktura")
-      .select("faktura_id, name, oderjyvach, prumitka, data")
+      .select("faktura_id, name, oderjyvach, prumitka, data, namber")
       .order("faktura_id", { ascending: true });
 
     if (error) {
@@ -115,185 +116,6 @@ export async function loadContragentData(): Promise<ContragentRecord[]> {
     // console.error("Критична помилка завантаження:", err);
     return [];
   }
-}
-
-// ====== ACT NUMBER MODAL ===============================
-
-async function showActNumberModal() {
-  const existingModal = document.getElementById("act-number-modal");
-  if (existingModal) existingModal.remove();
-
-  const overlay = document.createElement("div");
-  overlay.id = "act-number-modal";
-  overlay.style.cssText = `
-    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(0, 0, 0, 0.5); display: flex; align-items: center;
-    justify-content: center; z-index: 10001;
-  `;
-
-  const modal = document.createElement("div");
-  modal.style.cssText = `
-    background: white; border-radius: 12px; padding: 25px; width: 400px;
-    max-width: 90%; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
-  `;
-
-  modal.innerHTML = `
-    <h3 style="margin: 0 0 20px 0; text-align: center; color: #333; font-size: 20px;">Запис номера акту</h3>
-    <label style="display: block; margin-bottom: 8px; font-weight: bold; color: #555;">Пароль:</label>
-    <input type="password" id="act-password" placeholder="Введіть пароль..." style="
-      width: 100%; padding: 10px; margin-bottom: 15px; border: 2px solid #ddd;
-      border-radius: 6px; font-size: 14px; box-sizing: border-box;
-    ">
-    <div id="act-error" style="
-      display: none; background: #f44336; color: white; padding: 10px;
-      border-radius: 6px; margin-bottom: 15px; font-size: 14px; text-align: center;
-    "></div>
-    <label style="display: block; margin-bottom: 8px; font-weight: bold; color: #555;">Номер акту:</label>
-    <input type="text" id="act-number" placeholder="Завантаження..." disabled style="
-      width: 100%; padding: 10px; margin-bottom: 20px; border: 2px solid #ddd;
-      border-radius: 6px; font-size: 14px; box-sizing: border-box; background: #f5f5f5;
-    ">
-    <button id="act-ok-btn" style="
-      width: 100%; padding: 12px; background: linear-gradient(135deg, #4caf50, #45a049);
-      color: white; border: none; border-radius: 6px; font-size: 16px;
-      font-weight: bold; cursor: pointer; transition: all 0.3s;
-    ">OK</button>
-  `;
-
-  overlay.appendChild(modal);
-  document.body.appendChild(overlay);
-
-  const passwordInput = modal.querySelector(
-    "#act-password",
-  ) as HTMLInputElement;
-  const actNumberInput = modal.querySelector("#act-number") as HTMLInputElement;
-  const errorDiv = modal.querySelector("#act-error") as HTMLDivElement;
-  const okButton = modal.querySelector("#act-ok-btn") as HTMLButtonElement;
-
-  // Зберігаємо faktura_id для подальшого оновлення
-  let targetFakturaId: number | null = null;
-
-  // Завантаження поточного номера з faktura.namber (де name містить "Атлас")
-  try {
-    const { data, error } = await supabase
-      .from("faktura")
-      .select("faktura_id, namber")
-      .ilike("name", "%Брацлавець%")
-      .limit(1)
-      .maybeSingle();
-
-    if (error) {
-      // console.error("❌ Помилка завантаження номера акту з faktura:", error);
-      actNumberInput.placeholder = "Помилка завантаження";
-    } else if (data) {
-      targetFakturaId = data.faktura_id;
-      actNumberInput.value = data.namber != null ? String(data.namber) : "";
-      actNumberInput.placeholder = "Введіть номер акту...";
-    } else {
-      // console.warn("⚠️ Не знайдено запис faktura з 'Брацлавець' у name");
-      actNumberInput.placeholder = "Запис не знайдено";
-    }
-    actNumberInput.disabled = false;
-    actNumberInput.style.background = "white";
-    setTimeout(() => passwordInput.focus(), 100);
-  } catch (err) {
-    // console.error("❌ Критична помилка завантаження:", err);
-    actNumberInput.placeholder = "Помилка завантаження";
-    actNumberInput.disabled = false;
-    actNumberInput.style.background = "white";
-  }
-
-  // Фільтр тільки цифр
-  actNumberInput.addEventListener("input", (e) => {
-    const target = e.target as HTMLInputElement;
-    target.value = target.value.replace(/[^0-9]/g, "");
-  });
-
-  // Hover ефект для кнопки
-  okButton.addEventListener("mouseenter", () => {
-    okButton.style.background = "linear-gradient(135deg, #45a049, #4caf50)";
-    okButton.style.transform = "translateY(-2px)";
-    okButton.style.boxShadow = "0 4px 12px rgba(76, 175, 80, 0.4)";
-  });
-  okButton.addEventListener("mouseleave", () => {
-    okButton.style.background = "linear-gradient(135deg, #4caf50, #45a049)";
-    okButton.style.transform = "translateY(0)";
-    okButton.style.boxShadow = "none";
-  });
-
-  // Обробка натискання OK
-  const handleSubmit = async () => {
-    const password = passwordInput.value.trim();
-    const actNumber = actNumberInput.value.trim();
-
-    errorDiv.style.display = "none";
-
-    let storedPassword = "";
-    try {
-      const authData = localStorage.getItem("userAuthData");
-      if (authData) {
-        storedPassword = JSON.parse(authData)?.["Пароль"] || "";
-      }
-    } catch (err) {
-      // console.error("Помилка читання localStorage:", err);
-    }
-
-    if (password !== storedPassword) {
-      errorDiv.textContent = "✖ Пароль невірний. № акту не записаний";
-      errorDiv.style.display = "block";
-      passwordInput.style.borderColor = "#f44336";
-      passwordInput.focus();
-      return;
-    }
-
-    if (!actNumber) {
-      errorDiv.textContent = "⚠ Введіть номер акту";
-      errorDiv.style.display = "block";
-      errorDiv.style.backgroundColor = "#ff9800";
-      actNumberInput.style.borderColor = "#ff9800";
-      actNumberInput.focus();
-      return;
-    }
-
-    if (!targetFakturaId) {
-      errorDiv.textContent = "❌ Не знайдено запис faktura для збереження";
-      errorDiv.style.display = "block";
-      return;
-    }
-
-    try {
-      const { error } = await supabase
-        .from("faktura")
-        .update({ namber: parseInt(actNumber) })
-        .eq("faktura_id", targetFakturaId);
-
-      if (error) {
-        // console.error("❌ Помилка запису:", error);
-        errorDiv.textContent = `✖ Помилка запису: ${error.message}`;
-        errorDiv.style.display = "block";
-        return;
-      }
-
-      toast(`✅ Номер акту ${actNumber} успішно записано`, "#4caf50");
-      overlay.remove();
-    } catch (err) {
-      // console.error("❌ Критична помилка:", err);
-      errorDiv.textContent = "✖ Критична помилка запису";
-      errorDiv.style.display = "block";
-    }
-  };
-
-  okButton.addEventListener("click", handleSubmit);
-
-  const handleEnter = (e: KeyboardEvent) => {
-    if (e.key === "Enter") handleSubmit();
-  };
-  passwordInput.addEventListener("keypress", handleEnter);
-  actNumberInput.addEventListener("keypress", handleEnter);
-
-  overlay.addEventListener("click", (e) => {
-    if (e.target === overlay) overlay.remove();
-  });
 }
 
 // ====== DATE PICKER ====================================
@@ -449,40 +271,7 @@ export function clearFormFields() {
   updateAllBd(null);
 }
 
-// ✅ ФУНКЦІЯ ДЛЯ ВИДАЛЕННЯ КНОПКИ "ЗАПИС АКТУ"
-function removeActButton() {
-  const actButton = document.querySelector(".contragent-act-record-button");
-  if (actButton) {
-    actButton.remove();
-
-    // ✅ ВИПРАВЛЕННЯ: Повертаємо стандартне вирівнювання для кнопки "Ok"
-    const buttonsDiv = document.querySelector(
-      ".yes-no-buttons-all_other_bases",
-    ) as HTMLElement;
-    if (buttonsDiv) {
-      buttonsDiv.style.justifyContent = "flex-end"; // Вирівнюємо справа
-    }
-  }
-}
-
-// ✅ НАЛАШТУВАННЯ АВТОМАТИЧНОГО ПРИХОВУВАННЯ КНОПКИ
-function setupActButtonAutoHide() {
-  const otherButtons = document.querySelectorAll(
-    ".toggle-button-all_other_bases",
-  );
-
-  otherButtons.forEach((btn) => {
-    const buttonText = btn.textContent?.trim();
-    // Приховуємо кнопку при переключенні на будь-який інший розділ
-    if (buttonText !== "Контрагент") {
-      btn.addEventListener("click", removeActButton);
-    }
-  });
-}
-
 export async function handleDhereloContragent() {
-  removeActButton(); // Видаляємо стару кнопку перед створенням форми
-
   // ✅ ВИПРАВЛЕННЯ: запускаємо завантаження даних паралельно з будуванням форми
   const contragentDataPromise = loadContragentData();
 
@@ -606,14 +395,53 @@ export async function handleDhereloContragent() {
   dateWrapper.appendChild(dateInput);
   dateWrapper.appendChild(calendar);
 
-  // Кнопка запису акту
-  const actRecordButton = document.createElement("button");
-  actRecordButton.textContent = "🗄️ Запис Акту";
-  actRecordButton.className = "contragent-act-record-button";
-  actRecordButton.type = "button";
-  actRecordButton.addEventListener("click", showActNumberModal);
+  // Перемикач-повзунок Отримувач / Платник
+  const toggleWrapper = document.createElement("div");
+  toggleWrapper.className = "recipient-toggle-wrapper";
+
+  const labelLeft = document.createElement("span");
+  labelLeft.className =
+    "recipient-toggle-label recipient-toggle-label--left active";
+  labelLeft.textContent = "Платник";
+
+  const switchOuter = document.createElement("div");
+  switchOuter.className = "recipient-switch";
+  switchOuter.id = "contragent-recipient-toggle";
+  switchOuter.dataset.active = "false";
+
+  const switchKnob = document.createElement("div");
+  switchKnob.className = "recipient-switch__knob";
+  switchOuter.appendChild(switchKnob);
+
+  const labelRight = document.createElement("span");
+  labelRight.className = "recipient-toggle-label recipient-toggle-label--right";
+  labelRight.textContent = "Отримувач";
+
+  // Інпут для номера (namber)
+  const namberInput = document.createElement("input");
+  namberInput.type = "number";
+  namberInput.id = "contragent-namber";
+  namberInput.className = "input-all_other_bases contragent-namber-input";
+  namberInput.placeholder = "№ акту...";
+  namberInput.style.display = "none";
+
+  switchOuter.addEventListener("click", () => {
+    const isActive = switchOuter.dataset.active === "true";
+    switchOuter.dataset.active = isActive ? "false" : "true";
+    switchOuter.classList.toggle("active", !isActive);
+    labelLeft.classList.toggle("active", isActive);
+    labelRight.classList.toggle("active", !isActive);
+    // Показати інпут namber при Отримувач, приховати при Платник
+    namberInput.style.display = !isActive ? "" : "none";
+  });
+
+  toggleWrapper.appendChild(labelLeft);
+  toggleWrapper.appendChild(switchOuter);
+  toggleWrapper.appendChild(labelRight);
+  toggleWrapper.appendChild(namberInput);
 
   dateAndButtonWrapper.appendChild(dateWrapper);
+  dateAndButtonWrapper.appendChild(toggleWrapper);
 
   // Функція заповнення форми
   const fillFormWithContragent = (item: ContragentRecord) => {
@@ -627,6 +455,8 @@ export async function handleDhereloContragent() {
     autoResizeTextarea(noteInput);
 
     dateInput.value = isoToDots(item.data);
+
+    namberInput.value = item.namber != null ? String(item.namber) : "";
 
     receiverDropdown.classList.add("hidden-all_other_bases");
 
@@ -753,21 +583,13 @@ export async function handleDhereloContragent() {
   );
   if (buttonsDiv) {
     (buttonsDiv as HTMLElement).style.display = "flex";
-    (buttonsDiv as HTMLElement).style.justifyContent = "space-between";
+    (buttonsDiv as HTMLElement).style.justifyContent = "flex-end";
     (buttonsDiv as HTMLElement).style.width = "100%";
 
-    const oldButton = buttonsDiv.querySelector(".contragent-act-record-button");
-    if (oldButton) oldButton.remove();
-
-    // Додаємо кнопку "Запис Акту" НА ПОЧАТОК (зліва)
-    buttonsDiv.insertBefore(actRecordButton, buttonsDiv.firstChild);
     rightPanel.insertBefore(formContainer, buttonsDiv);
   } else {
     rightPanel.appendChild(formContainer);
   }
-
-  // ✅ Налаштовуємо автоматичне приховування кнопки
-  setupActButtonAutoHide();
 
   // Налаштування навігації Enter між полями
   setupEnterNavigationForFields([
@@ -784,8 +606,6 @@ export async function handleDhereloContragent() {
 export function clearContragentForm() {
   const form = document.getElementById("contragent-form");
   if (form) form.remove();
-
-  removeActButton();
 
   document.querySelectorAll(".contragent-calendar").forEach((cal) => {
     (cal as HTMLElement).style.display = "none";
@@ -846,13 +666,46 @@ export async function tryHandleFakturaCrud(): Promise<boolean> {
         return false;
       }
 
+      // Перевірка на дублікат за IBAN у prumitka
+      const ibanMatch = payload.prumitka.match(/UA\d{27}/);
+      if (ibanMatch) {
+        const iban = ibanMatch[0];
+        const { data: existing } = await supabase
+          .from("faktura")
+          .select("faktura_id")
+          .like("prumitka", `%${iban}%`)
+          .limit(1);
+
+        if (existing && existing.length > 0) {
+          toast(`⚠️ Контрагент з IBAN ${iban} вже існує`, "#ff9800");
+          return false;
+        }
+      }
+
       const nextId = await getNextFakturaId();
       if (nextId == null) {
         toast("❌ Помилка отримання наступного ID", "#f44336");
         return false;
       }
 
-      const ins = { faktura_id: nextId, ...payload };
+      const recipientToggle = document.getElementById(
+        "contragent-recipient-toggle",
+      ) as HTMLElement | null;
+      const isRecipientActive = recipientToggle?.dataset.active === "true";
+      const namberEl = document.getElementById(
+        "contragent-namber",
+      ) as HTMLInputElement | null;
+
+      const ins: Record<string, any> = { faktura_id: nextId, ...payload };
+      if (isRecipientActive) {
+        // Отримувач — записуємо число з інпуту
+        const nVal = namberEl?.value?.trim();
+        if (nVal !== "" && nVal != null) {
+          ins.namber = parseInt(nVal, 10);
+        } else {
+          ins.namber = null;
+        }
+      }
 
       const { error } = await supabase.from("faktura").insert(ins).select();
 
@@ -877,9 +730,27 @@ export async function tryHandleFakturaCrud(): Promise<boolean> {
     }
 
     if (mode === "Редагувати") {
+      const recipientToggleEdit = document.getElementById(
+        "contragent-recipient-toggle",
+      ) as HTMLElement | null;
+      const namberElEdit = document.getElementById(
+        "contragent-namber",
+      ) as HTMLInputElement | null;
+      const updatePayload: Record<string, any> = { ...payload };
+
+      if (recipientToggleEdit?.dataset.active === "true") {
+        // Отримувач — записуємо число з інпуту
+        const nVal = namberElEdit?.value?.trim();
+        if (nVal !== "" && nVal != null) {
+          updatePayload.namber = parseInt(nVal, 10);
+        } else {
+          updatePayload.namber = null;
+        }
+      }
+
       const { error } = await supabase
         .from("faktura")
-        .update(payload)
+        .update(updatePayload)
         .eq("faktura_id", faktura_id)
         .select();
 

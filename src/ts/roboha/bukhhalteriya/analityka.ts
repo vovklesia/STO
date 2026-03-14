@@ -188,7 +188,10 @@ async function loadAnalyticsData(): Promise<boolean> {
           .select("vutratu_id, dataOnn, kategoria, suma, act, opys_vytraty")
           .order("dataOnn", { ascending: false }),
         supabase.from("clients").select("client_id, data"),
-        supabase.from("cars").select("cars_id, data"),
+        supabase
+          .from("cars")
+          .select("cars_id, data")
+          .not("is_deleted", "is", true),
       ]);
 
     if (actsRes.error) throw actsRes.error;

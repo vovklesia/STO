@@ -69,17 +69,17 @@ export function attachPageFormatControls(
     <div class="pf-joystick">
       <div class="pf-joy-title">Стиснути / Розтягнути</div>
       <div class="pf-joy-row">
-        <button class="pf-btn pf-joy-btn" data-action="stretch-v" title="Розтягнути вертикально (міжрядковий +)">−</button>
+        <button class="pf-btn pf-joy-btn" data-action="stretch-v" title="Розтягнути вертикально (міжрядковий +)">-</button>
       </div>
       <div class="pf-joy-row">
         <span class="pf-joy-val pf-joy-val-side" data-value="sq-left">${state.offsetLeft}mm</span>
-        <button class="pf-btn pf-joy-btn" data-action="squeeze-h" title="Стиснути з боків (left і right +1)">+</button>
+        <button class="pf-btn pf-joy-btn" data-action="squeeze-h" title="Стиснути з боків (left і right -1)">-</button>
         <span class="pf-joy-val" data-value="sq-line">${state.lineSpacing}</span>
-        <button class="pf-btn pf-joy-btn" data-action="stretch-h" title="Розтягнути горизонтально (left і right −1)">+</button>
+        <button class="pf-btn pf-joy-btn" data-action="stretch-h" title="Стиснути вертикально (left і right -1)">+</button>
         <span class="pf-joy-val pf-joy-val-side" data-value="sq-right">${state.offsetRight}mm</span>
       </div>
       <div class="pf-joy-row">
-        <button class="pf-btn pf-joy-btn" data-action="squeeze-v" title="Стиснути вертикально (міжрядковий −)">−</button>
+        <button class="pf-btn pf-joy-btn" data-action="squeeze-v" title="Розтягнути горизонтально (міжрядковий +)">+</button>
       </div>
     </div>
     <div class="pf-divider"></div>

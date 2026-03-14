@@ -200,13 +200,14 @@ function amountToWordsUA(amount: number): string {
 /**
  * Отримує номер рахунку для поточного акту.
  * Джерело лічильника — таблиця faktura, стовпець namber
- * (запис, де name містить "Брацлавець").
+ * (обраний контрагент або запис де name містить "Брацлавець").
  */
 async function getInvoiceNumber(
   currentActId: number,
+  supplierFakturaId?: number | null,
 ): Promise<{ number: string; isNew: boolean }> {
   try {
-    // 1) Якщо у поточного акту вже є contrAgent_raxunok — повертаємо його
+    // Спочатку перевіряємо збережений номер в акті — якщо є, повертаємо його
     const { data: currentAct, error: currentError } = await supabase
       .from("acts")
       .select("contrAgent_raxunok")
@@ -224,26 +225,28 @@ async function getInvoiceNumber(
       };
     }
 
-    // 2) Номер для нового рахунку беремо з faktura.namber
-    const { data: fakturaRow, error: fakturaError } = await supabase
-      .from("faktura")
-      .select("namber")
-      .ilike("name", "%Брацлавець%")
-      .limit(1)
-      .maybeSingle();
+    // Якщо номера ще немає і обрано контрагента — генеруємо новий namber + 1
+    if (supplierFakturaId) {
+      const { data: fakturaRow, error: fakturaError } = await supabase
+        .from("faktura")
+        .select("namber")
+        .eq("faktura_id", supplierFakturaId)
+        .single();
 
-    if (fakturaError) {
-      // console.error("Помилка отримання namber з faktura:", fakturaError);
-      return { number: "0000001", isNew: true };
+      if (fakturaError || !fakturaRow) {
+        return { number: "0000001", isNew: true };
+      }
+
+      const currentNumber = parseInt(fakturaRow?.namber || "0");
+      const nextNumber = currentNumber + 1;
+
+      return {
+        number: formatNumberWithZeros(nextNumber),
+        isNew: true,
+      };
     }
 
-    const currentNumber = parseInt(fakturaRow?.namber || "0");
-    const nextNumber = currentNumber + 1;
-
-    return {
-      number: formatNumberWithZeros(nextNumber),
-      isNew: true,
-    };
+    return { number: "0000001", isNew: true };
   } catch (error) {
     // console.error("Помилка отримання номера рахунку:", error);
     return { number: "0000001", isNew: true };
@@ -259,27 +262,27 @@ async function saveInvoiceNumber(
   invoiceNumber: string,
   isoDateString: string,
   fakturaId: number | null,
+  supplierFakturaId?: number | null,
 ): Promise<boolean> {
   try {
-    // 1) Оновлюємо лічильник у faktura.namber (де name містить "Брацлавець")
-    const { data: fakturaRow, error: readError } = await supabase
-      .from("faktura")
-      .select("faktura_id, namber")
-      .ilike("name", "%Брацлавець%")
-      .limit(1)
-      .maybeSingle();
+    // 1) Оновлюємо лічильник у faktura.namber обраного контрагента
+    if (supplierFakturaId) {
+      const { data: fakturaRow, error: readError } = await supabase
+        .from("faktura")
+        .select("faktura_id, namber")
+        .eq("faktura_id", supplierFakturaId)
+        .single();
 
-    if (readError) {
-      // console.error("❌ Помилка зчитування faktura:", readError);
-    } else if (fakturaRow) {
-      const currentNamber = parseInt(fakturaRow.namber || "0");
-      const newNum = parseInt(invoiceNumber);
+      if (!readError && fakturaRow) {
+        const currentNamber = parseInt(fakturaRow.namber || "0");
+        const newNum = parseInt(invoiceNumber);
 
-      if (newNum > currentNamber) {
-        await supabase
-          .from("faktura")
-          .update({ namber: newNum })
-          .eq("faktura_id", fakturaRow.faktura_id);
+        if (newNum > currentNamber) {
+          await supabase
+            .from("faktura")
+            .update({ namber: newNum })
+            .eq("faktura_id", fakturaRow.faktura_id);
+        }
       }
     }
 
@@ -352,8 +355,11 @@ export function getCurrentActDataFromDOM(): any {
     const price = Math.round(rawPrice * discountMultiplier * 100) / 100;
     const suma = Math.round(rawSuma * discountMultiplier * 100) / 100;
 
+    const itemType =
+      (row as HTMLElement).getAttribute("data-item-type") || "work";
+
     if (name) {
-      items.push({ name, quantity, price, suma });
+      items.push({ name, quantity, price, suma, type: itemType });
     }
   });
 
@@ -408,6 +414,10 @@ async function generateInvoicePdf(invoiceNumber: string): Promise<void> {
 
   if (controls) controls.style.display = "none";
   hideFormatControlsForPdf(modalBody);
+
+  // Ховаємо плаваючу кнопку голосового введення
+  const voiceBtn = document.getElementById("voice-input-button") as HTMLElement;
+  if (voiceBtn) voiceBtn.style.display = "none";
 
   // Зберігаємо оригінальні стилі
   const originalStyle = modalBody.style.cssText;
@@ -590,6 +600,7 @@ async function generateInvoicePdf(invoiceNumber: string): Promise<void> {
     // Повертаємо оригінальні стилі
     if (controls) controls.style.display = "flex";
     showFormatControlsAfterPdf(modalBody);
+    if (voiceBtn) voiceBtn.style.display = "";
     modalBody.style.cssText = originalStyle;
     if (btnPrint) {
       btnPrint.classList.remove("loading");
@@ -607,11 +618,13 @@ export async function renderInvoicePreviewModal(actData: any): Promise<void> {
   let supplierName = "";
   let foundFakturaId: number | null = null;
 
+  // Завантажуємо постачальника: обраний контрагент або faktura_id=1
+  const supplierFakturaId = actData.overrideSupplierFakturaId || 1;
   try {
     const { data: fakturaData, error } = await supabase
       .from("faktura")
       .select("oderjyvach")
-      .eq("faktura_id", 1)
+      .eq("faktura_id", supplierFakturaId)
       .single();
 
     if (error) {
@@ -622,8 +635,6 @@ export async function renderInvoicePreviewModal(actData: any): Promise<void> {
   } catch (err) {
     // console.error("Критична помилка:", err);
   }
-
-  const recipientName = actData.client || "Одержувач не вказаний";
 
   if (actData.client) {
     try {
@@ -645,7 +656,12 @@ export async function renderInvoicePreviewModal(actData: any): Promise<void> {
     }
   }
 
-  const { number: invoiceNumber } = await getInvoiceNumber(actData.act_id);
+  const recipientName = actData.client || "Одержувач не вказаний";
+
+  const { number: invoiceNumber } = await getInvoiceNumber(
+    actData.act_id,
+    actData.overrideSupplierFakturaId,
+  );
 
   const now = new Date();
   const dateString = `${now.getDate()} ${getMonthNameGenitive(
@@ -663,7 +679,7 @@ export async function renderInvoicePreviewModal(actData: any): Promise<void> {
   let rowsHtml = actData.items
     .map(
       (item: any, index: number) => `
-      <tr>
+      <tr data-item-type="${item.type || "work"}">
           <td class="col-num">${index + 1}</td>
           <td class="col-name">${item.name}</td>
           <td class="col-unit" contenteditable="true" title="Натисніть, щоб змінити">шт</td>
@@ -709,7 +725,7 @@ export async function renderInvoicePreviewModal(actData: any): Promise<void> {
 
               <div class="invoice-title">
                   Рахунок-фактура № СФ-<span contenteditable="true" id="editable-invoice-number" title="Натисніть, щоб змінити номер">${invoiceNumber}</span><br>
-                  від ${dateString}
+                  від <span contenteditable="true" title="Натисніть, щоб змінити дату">${dateString}</span>
               </div>
 
               <table class="invoice-table">
@@ -742,8 +758,20 @@ export async function renderInvoicePreviewModal(actData: any): Promise<void> {
                   </div>
               </div>
               <div class="invoice-controls">
-                  <button id="btn-add-invoice" class="btn-save">💾 Зберегти</button>
-                  <button id="btn-print-invoice" class="btn-print">📥 Завантажити</button>
+                  <div class="invoice-controls__row invoice-controls__row--top">
+                      <div class="doc-filter-group">
+                          <button class="doc-filter-btn doc-filter-btn--all active" data-filter="all">✅ Все</button>
+                          <button class="doc-filter-btn doc-filter-btn--detail" data-filter="detail">🔩 Деталі</button>
+                          <button class="doc-filter-btn doc-filter-btn--work" data-filter="work">🔧 Послуги</button>
+                      </div>
+                      <select id="invoice-client-select" class="doc-client-select">
+                          <option value="">— Оберіть платника —</option>
+                      </select>
+                  </div>
+                  <div class="invoice-controls__row invoice-controls__row--bottom">
+                      <button id="btn-add-invoice" class="btn-save">💾 Зберегти</button>
+                      <button id="btn-print-invoice" class="btn-print">📥 Завантажити</button>
+                  </div>
               </div>
           </div>
       </div>
@@ -807,6 +835,7 @@ export async function renderInvoicePreviewModal(actData: any): Promise<void> {
       editedInvoiceNumber,
       dateForDB,
       foundFakturaId,
+      actData.overrideSupplierFakturaId,
     );
 
     if (success) {
@@ -831,5 +860,92 @@ export async function renderInvoicePreviewModal(actData: any): Promise<void> {
       btnAdd.disabled = false;
       btnAdd.textContent = "💾 Зберегти";
     }
+  });
+
+  // --- Dropdown: вибір контрагента-одержувача з таблиці faktura ---
+  const invoiceClientSelect = document.getElementById(
+    "invoice-client-select",
+  ) as HTMLSelectElement | null;
+  if (invoiceClientSelect) {
+    (async () => {
+      try {
+        const { data: fakturaList } = await supabase
+          .from("faktura")
+          .select("faktura_id, oderjyvach, prumitka")
+          .not("prumitka", "is", null)
+          .order("faktura_id", { ascending: true });
+        if (fakturaList) {
+          (
+            fakturaList as Array<{
+              faktura_id: number;
+              oderjyvach: string | null;
+              prumitka: string | null;
+            }>
+          ).forEach((row) => {
+            if (!row.prumitka) return;
+            const opt = document.createElement("option");
+            opt.value = String(row.faktura_id);
+            opt.textContent =
+              row.prumitka.split("\n")[0].trim() || `ID ${row.faktura_id}`;
+            opt.dataset.oderjyvach = row.oderjyvach || "";
+            invoiceClientSelect.appendChild(opt);
+          });
+        }
+      } catch {
+        /* silent */
+      }
+    })();
+
+    invoiceClientSelect.addEventListener("change", () => {
+      const sel =
+        invoiceClientSelect.options[invoiceClientSelect.selectedIndex];
+      if (!sel?.value) return;
+      const recipientCell = overlay?.querySelector(
+        ".header-table tr:nth-child(2) .value-cell",
+      ) as HTMLElement | null;
+      if (recipientCell) {
+        recipientCell.textContent =
+          sel.dataset.oderjyvach || sel.textContent || "";
+      }
+    });
+  }
+
+  // --- Кнопки фільтру: Деталі / Послуги / Все ---
+  function applyInvoiceFilter(filter: string): void {
+    const tbody = overlay?.querySelector(".invoice-table tbody");
+    if (!tbody) return;
+    let visibleSum = 0;
+    let visIdx = 1;
+    Array.from(tbody.querySelectorAll("tr")).forEach((tr) => {
+      if (tr.classList.contains("total-row")) return;
+      const type = (tr as HTMLElement).dataset.itemType || "work";
+      const show = filter === "all" || type === filter;
+      (tr as HTMLElement).style.display = show ? "" : "none";
+      if (show) {
+        const sumCell = tr.querySelector(".col-sum");
+        const val =
+          parseFloat(
+            sumCell?.textContent?.replace(/\s/g, "").replace(",", ".") || "0",
+          ) || 0;
+        visibleSum += val;
+        const numCell = tr.querySelector(".col-num");
+        if (numCell) numCell.textContent = String(visIdx++);
+      }
+    });
+    const totalCell = tbody.querySelector(".total-value") as HTMLElement | null;
+    if (totalCell) totalCell.textContent = formatNumberWithSpaces(visibleSum);
+    const sumSpan = overlay?.querySelector(
+      ".sum-in-words span[contenteditable]",
+    ) as HTMLElement | null;
+    if (sumSpan) sumSpan.textContent = amountToWordsUA(visibleSum);
+  }
+
+  const filterBtns = overlay?.querySelectorAll(".doc-filter-btn");
+  filterBtns?.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      filterBtns.forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      applyInvoiceFilter((btn as HTMLElement).dataset.filter || "all");
+    });
   });
 }

@@ -280,7 +280,7 @@ export async function updatePriceWarningForRow(row: HTMLElement) {
   const percentInfo = await loadPercentByWarehouse(scladNomer);
   const enteredPrice = parseNumFromNode(priceCell);
   const basePrice = Math.round(Number(picked.price) || 0);
-  const minPrice = Math.round(basePrice * (1 + percentInfo.percent / 100));
+  const minPrice = Math.ceil(basePrice * (1 + percentInfo.percent / 100));
 
   // ✅ СТИЛІЗАЦІЯ ПО СТАТУСУ СКЛАДУ
   if (percentInfo.status === "blocked") {

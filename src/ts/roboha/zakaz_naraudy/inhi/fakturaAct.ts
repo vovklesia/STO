@@ -17,7 +17,25 @@ export async function renderActPreviewModal(data: any): Promise<void> {
   const oldModal = document.getElementById(ACT_PREVIEW_MODAL_ID);
   if (oldModal) oldModal.remove();
 
-  const rawNum = data.foundContrAgentRaxunok || 0;
+  // Номер акту: спочатку перевіряємо збережений contrAgent_act, потім contrAgent_raxunok
+  let rawNum = data.foundContrAgentAct || data.foundContrAgentRaxunok || 0;
+
+  // Якщо номера ще немає і обрано контрагента — беремо його namber + 1
+  if (!rawNum && data.overrideSupplierFakturaId) {
+    try {
+      const { data: supplierData } = await supabase
+        .from("faktura")
+        .select("namber")
+        .eq("faktura_id", data.overrideSupplierFakturaId)
+        .single();
+      if (supplierData?.namber != null) {
+        rawNum = supplierData.namber + 1;
+      }
+    } catch {
+      /* keep rawNum */
+    }
+  }
+
   const actNumber = String(rawNum).padStart(7, "0");
   const invoiceNumber = `СФ-${actNumber}`;
 
@@ -30,16 +48,16 @@ export async function renderActPreviewModal(data: any): Promise<void> {
   let executorPrumitka = "";
   let clientPrumitka = "";
 
-  const invoiceDateText = formatInvoiceDate(
-    data?.foundContrAgentRaxunokData || data?.contrAgent_raxunok_data || null,
-  );
+  const invoiceDateText = formatInvoiceDate(new Date());
   const todayDateText = formatDateWithMonthName(new Date());
 
   try {
+    // Завантажуємо виконавця: обраний контрагент або faktura_id=1
+    const supplierFakturaId = data.overrideSupplierFakturaId || 1;
     const { data: myData, error: myError } = await supabase
       .from("faktura")
       .select("name, prumitka")
-      .eq("faktura_id", 1)
+      .eq("faktura_id", supplierFakturaId)
       .single();
 
     if (myError) {
@@ -143,7 +161,7 @@ export async function renderActPreviewModal(data: any): Promise<void> {
   let rowsHtml = items
     .map(
       (item: any, index: number) => `
-    <tr>
+    <tr data-item-type="${item.type || "work"}">
       <td class="col-num">${index + 1}</td>
       <td class="col-name">${item.name || ""}</td>
       <td class="col-unit" contenteditable="true" title="Натисніть, щоб змінити">шт</td>
@@ -191,9 +209,9 @@ export async function renderActPreviewModal(data: any): Promise<void> {
             <tbody>${rowsHtml}</tbody>
           </table>
           <div class="fakturaAct-total-section">
-            <p>Загальна вартість робіт (послуг) без ПДВ ${formatNumberWithSpaces(
+            <p>Загальна вартість робіт (послуг) без ПДВ <span id="act-total-amount">${formatNumberWithSpaces(
               totalSum,
-            )} грн <span contenteditable="true">${totalSumWords}</span></p>
+            )}</span> грн <span contenteditable="true">${totalSumWords}</span></p>
             <p>Сторони претензій одна до одної не мають.</p>
           </div>
           <div class="fakturaAct-footer">
@@ -204,20 +222,32 @@ export async function renderActPreviewModal(data: any): Promise<void> {
                 <div class="fakturaAct-footer-signature">____________________</div>
                 <div class="fakturaAct-signature-name" contenteditable="true" title="Натисніть, щоб змінити">${executorFullName}</div>
                 <div class="fakturaAct-footer-note">* Відповідальний за здійснення господарської операції і правильність її оформлення</div>
-                <div class="fakturaAct-footer-date">${todayDateText}</div>
+                <div class="fakturaAct-footer-date" contenteditable="true" title="Натисніть, щоб змінити дату">${todayDateText}</div>
                 <div class="fakturaAct-footer-details" contenteditable="true" title="Натисніть, щоб змінити">${executorPrumitka}</div>
               </div>
               <div class="fakturaAct-footer-right">
                 <div class="fakturaAct-footer-title">Від Замовника:</div>
                 <div class="fakturaAct-footer-signatureZamov">____________________</div>
-                <div class="fakturaAct-footer-date">${todayDateText}</div>
+                <div class="fakturaAct-footer-date" contenteditable="true" title="Натисніть, щоб змінити дату">${todayDateText}</div>
                 <div class="fakturaAct-footer-details" contenteditable="true" title="Натисніть, щоб змінити">${clientPrumitka}</div>
               </div>
             </div>
           </div>
           <div class="fakturaAct-controls">
-            <button id="btn-save-act" class="btn-save">💾 Зберегти</button>
-            <button id="btn-print-act" class="btn-print">📥 Завантажити</button>
+            <div class="fakturaAct-controls__row fakturaAct-controls__row--top">
+              <div class="doc-filter-group">
+                <button class="doc-filter-btn doc-filter-btn--all active" data-filter="all">✅ Все</button>
+                <button class="doc-filter-btn doc-filter-btn--detail" data-filter="detail">🔩 Деталі</button>
+                <button class="doc-filter-btn doc-filter-btn--work" data-filter="work">🔧 Послуги</button>
+              </div>
+              <select id="act-client-select" class="doc-client-select">
+                <option value="">— Оберіть платника —</option>
+              </select>
+            </div>
+            <div class="fakturaAct-controls__row fakturaAct-controls__row--bottom">
+              <button id="btn-save-act" class="btn-save">💾 Зберегти</button>
+              <button id="btn-print-act" class="btn-print">📥 Завантажити</button>
+            </div>
           </div>
       </div>
   </div>`;
@@ -251,7 +281,11 @@ export async function renderActPreviewModal(data: any): Promise<void> {
       document.getElementById("editable-act-number")?.textContent?.trim() ||
       actNumber;
     const editedRawNum = parseInt(editedActNumber) || rawNum;
-    const success = await saveActData(data.act_id, editedRawNum);
+    const success = await saveActData(
+      data.act_id,
+      editedRawNum,
+      data.overrideSupplierFakturaId,
+    );
     if (success) {
       btnSave.textContent = "✅ Збережено";
       btnSave.style.backgroundColor = "#4caf50";
@@ -286,6 +320,157 @@ export async function renderActPreviewModal(data: any): Promise<void> {
       btnPrint.textContent = "📥 Завантажити";
       btnPrint.disabled = false;
     }, 50);
+  });
+
+  // --- Dropdown: вибір контрагента-замовника з таблиці faktura ---
+  const actClientSelect = document.getElementById(
+    "act-client-select",
+  ) as HTMLSelectElement | null;
+  if (actClientSelect) {
+    (async () => {
+      try {
+        const { data: fakturaList } = await supabase
+          .from("faktura")
+          .select("faktura_id, name, prumitka")
+          .not("prumitka", "is", null)
+          .order("faktura_id", { ascending: true });
+        if (fakturaList) {
+          (
+            fakturaList as Array<{
+              faktura_id: number;
+              name: string | null;
+              prumitka: string | null;
+            }>
+          ).forEach((row) => {
+            if (!row.prumitka) return;
+            const opt = document.createElement("option");
+            opt.value = String(row.faktura_id);
+            opt.textContent =
+              row.prumitka.split("\n")[0].trim() || `ID ${row.faktura_id}`;
+            opt.dataset.name = row.name || "";
+            opt.dataset.prumitka = row.prumitka || "";
+            actClientSelect.appendChild(opt);
+          });
+        }
+      } catch {
+        /* silent */
+      }
+    })();
+
+    actClientSelect.addEventListener("change", () => {
+      const sel = actClientSelect.options[actClientSelect.selectedIndex];
+      if (!sel?.value) return;
+      const selectedName = sel.dataset.name || "";
+      const selectedPrumitka = sel.dataset.prumitka || "";
+
+      // 1. Оновлюємо правий блок "ЗАТВЕРДЖУЮ" (другий fakturaAct-approval-content)
+      const approvalContents = overlay?.querySelectorAll(
+        ".fakturaAct-approval-content",
+      );
+      const rightApproval = approvalContents?.[1] as HTMLElement | null;
+      if (rightApproval) {
+        rightApproval.textContent = selectedName;
+      }
+
+      // 2. Парсимо ім'я організації та директора для вступного тексту
+      let newZamovnykPart = "";
+      let newDirectorGenitive = "";
+      if (selectedName) {
+        const lines = selectedName
+          .split("\n")
+          .map((l) => l.trim())
+          .filter(Boolean);
+        const orgLines: string[] = [];
+        for (const line of lines) {
+          if (
+            line.includes("ЄДРПОУ") ||
+            line.includes("тел.") ||
+            line.includes("IBAN") ||
+            line.includes("директор") ||
+            /^_{3,}$/.test(line)
+          )
+            continue;
+          const words = line.split(/\s+/);
+          if (
+            words.length === 3 &&
+            /^[А-ЯЄІЇҐ]/.test(line) &&
+            line.toUpperCase() !== line
+          ) {
+            newDirectorGenitive = convertToGenitive(line);
+            break;
+          }
+          orgLines.push(line);
+        }
+        newZamovnykPart = orgLines.join(" ");
+      }
+      if (!newZamovnykPart && selectedName) {
+        newZamovnykPart = normalizeSingleLine(selectedName);
+      }
+
+      // 3. Оновлюємо вступний текст акту
+      const introTextEl = overlay?.querySelector(
+        ".fakturaAct-intro-text",
+      ) as HTMLElement | null;
+      if (introTextEl) {
+        const currentActNum =
+          (
+            overlay?.querySelector("#editable-act-number") as HTMLElement | null
+          )?.textContent?.trim() || actNumber;
+        const currentInvoiceNumber = `СФ-${currentActNum}`;
+        introTextEl.innerHTML = `Ми, представники Замовника ${newZamovnykPart} директора <u>${newDirectorGenitive}</u>, з одного боку, та представник Виконавця ${executorSentencePart}, з іншого боку, склали цей акт про те, що Виконавцем були проведені такі роботи (надані такі послуги) по рахунку № ${currentInvoiceNumber}${invoiceDateText ? ` від ${invoiceDateText}` : ""}:`;
+      }
+
+      // 4. Оновлюємо реквізити замовника в нижній частині (права колонка)
+      const rightFooterDetails = overlay?.querySelector(
+        ".fakturaAct-footer-right .fakturaAct-footer-details",
+      ) as HTMLElement | null;
+      if (rightFooterDetails) {
+        rightFooterDetails.textContent = selectedPrumitka;
+      }
+    });
+  }
+
+  // --- Кнопки фільтру: Деталі / Послуги / Все ---
+  function applyActFilter(filter: string): void {
+    const tbody = overlay?.querySelector(".fakturaAct-table tbody");
+    if (!tbody) return;
+    let visibleSum = 0;
+    let visIdx = 1;
+    Array.from(tbody.querySelectorAll("tr")).forEach((tr) => {
+      if (tr.classList.contains("total-row")) return;
+      const type = (tr as HTMLElement).dataset.itemType || "work";
+      const show = filter === "all" || type === filter;
+      (tr as HTMLElement).style.display = show ? "" : "none";
+      if (show) {
+        const sumCell = tr.querySelector(".col-sum");
+        const val =
+          parseFloat(
+            sumCell?.textContent?.replace(/\s/g, "").replace(",", ".") || "0",
+          ) || 0;
+        visibleSum += val;
+        const numCell = tr.querySelector(".col-num");
+        if (numCell) numCell.textContent = String(visIdx++);
+      }
+    });
+    const totalCell = tbody.querySelector(".total-value") as HTMLElement | null;
+    if (totalCell) totalCell.textContent = formatNumberWithSpaces(visibleSum);
+    const amountSpan = overlay?.querySelector(
+      "#act-total-amount",
+    ) as HTMLElement | null;
+    if (amountSpan) amountSpan.textContent = formatNumberWithSpaces(visibleSum);
+    const wordsSpan = overlay?.querySelector(
+      ".fakturaAct-total-section p:first-child span[contenteditable]",
+    ) as HTMLElement | null;
+    if (wordsSpan) wordsSpan.textContent = amountToWordsUA(visibleSum);
+  }
+
+  const filterBtns = overlay?.querySelectorAll(".doc-filter-btn");
+  filterBtns?.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      filterBtns.forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      applyActFilter((btn as HTMLElement).dataset.filter || "all");
+    });
   });
 }
 
@@ -455,7 +640,11 @@ function amountToWordsUA(amount: number): string {
     .padStart(2, "0")} ${getForm(kopecks, "копійка", "копійки", "копійок")}`;
 }
 
-async function saveActData(actId: number, actNumber: number): Promise<boolean> {
+async function saveActData(
+  actId: number,
+  actNumber: number,
+  supplierFakturaId?: number | null,
+): Promise<boolean> {
   try {
     const now = new Date();
     const todayISO = `${now.getFullYear()}-${String(
@@ -470,18 +659,41 @@ async function saveActData(actId: number, actNumber: number): Promise<boolean> {
     } catch (e) {
       // console.error(e);
     }
+    const updatePayload: Record<string, any> = {
+      contrAgent_act: actNumber,
+      contrAgent_act_data: todayISO,
+      xto_vbpbsav: userName,
+    };
+    if (supplierFakturaId) {
+      updatePayload.faktura_id_akt = supplierFakturaId;
+    }
     const { error } = await supabase
       .from("acts")
-      .update({
-        contrAgent_act: actNumber,
-        contrAgent_act_data: todayISO,
-        xto_vbpbsav: userName,
-      })
+      .update(updatePayload)
       .eq("act_id", actId);
     if (error) {
       // console.error("❌ Помилка збереження акту:", error);
       return false;
     }
+
+    // Оновлюємо лічильник namber у контрагента
+    if (supplierFakturaId) {
+      const { data: fakturaRow } = await supabase
+        .from("faktura")
+        .select("namber")
+        .eq("faktura_id", supplierFakturaId)
+        .single();
+      if (fakturaRow) {
+        const currentNamber = parseInt(fakturaRow.namber || "0");
+        if (actNumber > currentNamber) {
+          await supabase
+            .from("faktura")
+            .update({ namber: actNumber })
+            .eq("faktura_id", supplierFakturaId);
+        }
+      }
+    }
+
     return true;
   } catch (e) {
     // console.error("❌ Критична помилка:", e);
@@ -535,6 +747,10 @@ async function generateActPdf(actNumber: string): Promise<void> {
   ) as HTMLElement;
   if (controls) controls.style.display = "none";
   hideFormatControlsForPdf(container);
+
+  // Ховаємо плаваючу кнопку голосового введення
+  const voiceBtn = document.getElementById("voice-input-button") as HTMLElement;
+  if (voiceBtn) voiceBtn.style.display = "none";
 
   // Зберігаємо оригінальні стилі
   const originalStyle = container.style.cssText;
@@ -699,6 +915,7 @@ async function generateActPdf(actNumber: string): Promise<void> {
     // Повертаємо оригінальні стилі
     if (controls) controls.style.display = "flex";
     showFormatControlsAfterPdf(container);
+    if (voiceBtn) voiceBtn.style.display = "";
     container.style.cssText = originalStyle;
   }
 }

@@ -10,6 +10,16 @@ import { showNotification } from "./vspluvauhe_povidomlenna";
 
 export const MODAL_ACT_RAXUNOK_ID = "modal-act-raxunok";
 
+// Зберігаємо обраний faktura_id контрагента-отримувача
+let selectedReceiverFakturaId: number | null = null;
+
+export function getSelectedReceiverFakturaId(): number | null {
+  return selectedReceiverFakturaId;
+}
+
+export function setSelectedReceiverFakturaId(id: number | null): void {
+  selectedReceiverFakturaId = id;
+}
 
 /* --- Модальне вікно вибору (Рахунок або Акт) --- */
 
@@ -68,6 +78,11 @@ export function initModalActRaxunokHandlers(): void {
         return;
       }
 
+      // Передаємо вибраного контрагента як постачальника (замість faktura_id=1)
+      if (selectedReceiverFakturaId) {
+        actData.overrideSupplierFakturaId = selectedReceiverFakturaId;
+      }
+
       await renderInvoicePreviewModal(actData);
       closeModalActRaxunok();
     } catch (error) {
@@ -96,15 +111,18 @@ export function initModalActRaxunokHandlers(): void {
       // Ініціалізуємо змінні в об'єкті actData
       actData.realActId = extractedActId;
       actData.foundFakturaId = null;
-      actData.foundContrAgentRaxunok = null; // Нове поле
-      actData.foundContrAgentRaxunokData = null; // Нове поле
+      actData.foundContrAgentRaxunok = null;
+      actData.foundContrAgentRaxunokData = null;
+      actData.foundContrAgentAct = null;
+      actData.foundContrAgentActData = null;
 
       // 3. Якщо ID валідний, робимо розширений запит до БД
       if (extractedActId > 0) {
         const { data: dbData, error } = await supabase
           .from("acts")
-          // 👇 ДОДАЛИ НОВІ ПОЛЯ В SELECT
-          .select("faktura_id, contrAgent_raxunok, contrAgent_raxunok_data")
+          .select(
+            "faktura_id, contrAgent_raxunok, contrAgent_raxunok_data, contrAgent_act, contrAgent_act_data",
+          )
           .eq("act_id", extractedActId)
           .single();
 
@@ -113,10 +131,16 @@ export function initModalActRaxunokHandlers(): void {
         } else if (dbData) {
           // 4. Записуємо отримані дані
           actData.foundFakturaId = dbData.faktura_id;
-          actData.foundContrAgentRaxunok = dbData.contrAgent_raxunok; // Зберігаємо номер
-          actData.foundContrAgentRaxunokData = dbData.contrAgent_raxunok_data; // Зберігаємо дату
-
+          actData.foundContrAgentRaxunok = dbData.contrAgent_raxunok;
+          actData.foundContrAgentRaxunokData = dbData.contrAgent_raxunok_data;
+          actData.foundContrAgentAct = dbData.contrAgent_act;
+          actData.foundContrAgentActData = dbData.contrAgent_act_data;
         }
+      }
+
+      // Передаємо вибраного контрагента як виконавця (замість faktura_id=1)
+      if (selectedReceiverFakturaId) {
+        actData.overrideSupplierFakturaId = selectedReceiverFakturaId;
       }
 
       // 5. Викликаємо рендер
@@ -145,6 +169,83 @@ export function initCreateActRaxunokButton(): void {
     e.preventDefault();
     e.stopPropagation();
 
-    openModalActRaxunok();
+    try {
+      const { data: receivers, error } = await supabase
+        .from("faktura")
+        .select("faktura_id, name, oderjyvach, namber")
+        .not("namber", "is", null)
+        .order("faktura_id", { ascending: true });
+
+      if (error || !receivers || receivers.length === 0) {
+        showNotification("Контрагентів-отримувачів не знайдено", "error");
+        return;
+      }
+
+      if (receivers.length === 1) {
+        selectedReceiverFakturaId = receivers[0].faktura_id;
+        openModalActRaxunok();
+      } else {
+        showReceiverSelectionModal(receivers);
+      }
+    } catch (err) {
+      showNotification("Помилка завантаження контрагентів", "error");
+    }
   });
+}
+
+function showReceiverSelectionModal(
+  receivers: Array<{
+    faktura_id: number;
+    name: string;
+    oderjyvach: string;
+    namber: number;
+  }>,
+): void {
+  const existing = document.getElementById("receiver-selection-modal");
+  if (existing) existing.remove();
+
+  const overlay = document.createElement("div");
+  overlay.id = "receiver-selection-modal";
+  overlay.className = "receiver-selection-overlay";
+
+  const content = document.createElement("div");
+  content.className = "receiver-selection-content";
+
+  const header = document.createElement("h2");
+  header.className = "receiver-selection-title";
+  header.textContent = "Оберіть отримувача";
+  content.appendChild(header);
+
+  const grid = document.createElement("div");
+  grid.className = "receiver-selection-grid";
+
+  receivers.forEach((r) => {
+    const card = document.createElement("div");
+    card.className = "receiver-selection-card";
+
+    const firstLine = (r.name || "").split("\n")[0]?.trim() || "Без назви";
+
+    card.innerHTML = `
+      <div class="receiver-card__name">${firstLine}</div>
+      <div class="receiver-card__details">${r.oderjyvach || ""}</div>
+      <div class="receiver-card__number">№ ${r.namber}</div>
+    `;
+
+    card.addEventListener("click", () => {
+      selectedReceiverFakturaId = r.faktura_id;
+      overlay.remove();
+      openModalActRaxunok();
+    });
+
+    grid.appendChild(card);
+  });
+
+  content.appendChild(grid);
+  overlay.appendChild(content);
+
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) overlay.remove();
+  });
+
+  document.body.appendChild(overlay);
 }

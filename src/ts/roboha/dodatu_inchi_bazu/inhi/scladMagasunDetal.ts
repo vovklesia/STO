@@ -312,6 +312,7 @@ export async function renderScladForm() {
           ["штук", "штук"],
           ["літр", "літр"],
           ["комплект", "комплект"],
+          ["метр", "метр"],          
         ])}
         <div class="form-field">
           <label class="field-label" for="sclad_zapchastyst_pib">Запчастист</label>

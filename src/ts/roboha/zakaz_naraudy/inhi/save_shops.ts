@@ -171,8 +171,8 @@ async function fetchPrevDetailsFromShops(actId: number): Promise<
 
     if (error || !shops) {
       // console.warn(
-        // "fetchPrevDetailsFromShops: помилка отримання магазинів:",
-        // error,
+      // "fetchPrevDetailsFromShops: помилка отримання магазинів:",
+      // error,
       // );
       return out;
     }
@@ -260,7 +260,7 @@ async function syncShopsHistoryForAct(params: {
     for (const r of arr) if (r.sclad_id) scladIds.push(r.sclad_id);
   const meta = await fetchScladMeta(scladIds);
 
-  // ---- 2) ОНОВИТИ/СТВОРИТИ записи для поточних магазинів (повна заміна "Деталі") ----
+  // ---- 2) ОНОВИТИ/СТВОРИТИ записи для поточних магазинів ----
   for (const [shopName, rows] of curByShop.entries()) {
     const shopRow = await fetchShopByName(shopName);
     if (!shopRow) {
@@ -272,7 +272,7 @@ async function syncShopsHistoryForAct(params: {
       continue;
     }
 
-    // ✅ Отримуємо попередні записи для збереження recordId
+    // Отримуємо попередні записи
     const history = ensureShopHistoryRoot(shopRow);
     if (!history[params.dateKey]) history[params.dateKey] = [];
     const dayBucket = history[params.dateKey] as any[];
@@ -285,7 +285,7 @@ async function syncShopsHistoryForAct(params: {
       ? actEntry["Деталі"]
       : [];
 
-    // ✅ Створюємо Map для пошуку за recordId
+    // Будуємо Map за recordId для пошуку старих записів
     const prevDetailsById = new Map<string, any>();
     for (const pd of prevDetails) {
       if (pd.recordId) {
@@ -298,11 +298,10 @@ async function syncShopsHistoryForAct(params: {
       const r = rows[idx];
       const metaR = r.sclad_id ? meta.get(r.sclad_id) || null : null;
 
-      // ✅ Визначаємо recordId: з поточного запису, з попереднього, або генеруємо новий
+      // Визначаємо recordId
       let recordId = (r as any).recordId || "";
 
       if (!recordId) {
-        // Спробуємо знайти за індексом + назвою
         const prevByIndex = prevDetails[idx];
         if (
           prevByIndex &&
@@ -314,23 +313,27 @@ async function syncShopsHistoryForAct(params: {
       }
 
       if (!recordId) {
-        // Генеруємо новий унікальний ID
         recordId = `${params.actId}_${shopName}_detail_${idx}_${Date.now()}`;
       }
 
-      out.push({
-        sclad_id: r.sclad_id,
-        Каталог: r.Каталог
-          ? isNaN(Number(r.Каталог))
-            ? r.Каталог
-            : Number(r.Каталог)
-          : null,
-        Ціна: Number(r.Ціна) || 0,
-        Рахунок: metaR ? (metaR.rahunok ?? null) : null, // ✅ беремо з колонки rahunok
-        Кількість: Number(r.Кількість) || 0,
-        Найменування: r.Найменування,
-        recordId, // ✅ Додаємо recordId
-      });
+      // ✅ MERGE: починаємо зі старого запису → зберігаємо ВСІ існуючі поля
+      const prevRecord = recordId ? prevDetailsById.get(recordId) : null;
+      const newRecord: any = prevRecord ? { ...prevRecord } : {};
+
+      // Перезаписуємо лише поля, що оновлюються при збереженні
+      newRecord.sclad_id = r.sclad_id;
+      newRecord.Каталог = r.Каталог
+        ? isNaN(Number(r.Каталог))
+          ? r.Каталог
+          : Number(r.Каталог)
+        : null;
+      newRecord.Ціна = Number(r.Ціна) || 0;
+      newRecord.Рахунок = metaR ? (metaR.rahunok ?? null) : null;
+      newRecord.Кількість = Number(r.Кількість) || 0;
+      newRecord.Найменування = r.Найменування;
+      newRecord.recordId = recordId;
+
+      out.push(newRecord);
     }
 
     if (!actEntry) {
@@ -343,12 +346,22 @@ async function syncShopsHistoryForAct(params: {
       };
       dayBucket.push(actEntry);
     }
-    actEntry["Деталі"] = out;
-    actEntry["ДатаЗакриття"] = params.dateClose; // YYYY-MM-DD або null
-    actEntry["Клієнт"] = params.clientInfo;
-    actEntry["Автомобіль"] = params.carInfo;
 
-    await updateShopJson(shopRow);
+    // ✅ ОПТИМІЗАЦІЯ: оновлюємо БД тільки якщо дані реально змінились
+    const detailsChanged =
+      JSON.stringify(prevDetails) !== JSON.stringify(out) ||
+      actEntry["ДатаЗакриття"] !== params.dateClose ||
+      actEntry["Клієнт"] !== params.clientInfo ||
+      actEntry["Автомобіль"] !== params.carInfo;
+
+    if (detailsChanged) {
+      actEntry["Деталі"] = out;
+      actEntry["ДатаЗакриття"] = params.dateClose;
+      actEntry["Клієнт"] = params.clientInfo;
+      actEntry["Автомобіль"] = params.carInfo;
+
+      await updateShopJson(shopRow);
+    }
   }
 
   // ---- 3) ОЧИСТИТИ старі магазини, яких вже немає в поточному наборі ----
