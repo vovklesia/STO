@@ -132,12 +132,24 @@ git commit --allow-empty -m "deploy: $timestamp"
 # Check if commit failed but continue (should not fail with --allow-empty)
 if ($LASTEXITCODE -ne 0) { Write-Host "Commit failed (unexpected), proceeding..." }
 
-# Збільшуємо HTTP буфер щоб уникнути HTTP 408 timeout при великих пакетах
+# Increase HTTP buffer to avoid HTTP 408 timeout on large pushes
 git config http.postBuffer 524288000
 git push origin main
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "❌ Push failed!" -ForegroundColor Red
-    exit 1
+    Write-Host "⚠️  Push rejected. Trying pull --rebase + push..." -ForegroundColor Yellow
+    git pull --rebase origin main
+    if ($LASTEXITCODE -ne 0) {
+        # Rebase conflict - abort and force-with-lease
+        Write-Host "⚠️  Rebase conflict. Aborting and using --force-with-lease..." -ForegroundColor Yellow
+        git rebase --abort 2>$null
+        git push --force-with-lease origin main
+    } else {
+        git push origin main
+    }
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "❌ Push failed even after retry!" -ForegroundColor Red
+        exit 1
+    }
 }
 Write-Host "✅ Pushed to GitHub! Vercel should start building automatically." -ForegroundColor Green
 
